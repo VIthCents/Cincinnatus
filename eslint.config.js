@@ -46,6 +46,24 @@ export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
 
+  {
+    rules: {
+      // A leading underscore marks something deliberately discarded, e.g. the
+      // `content` field destructured off a Greenhouse record so the rest can be
+      // stored without it.
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        {
+          argsIgnorePattern: "^_",
+          varsIgnorePattern: "^_",
+          caughtErrorsIgnorePattern: "^_",
+          destructuredArrayIgnorePattern: "^_",
+          ignoreRestSiblings: true,
+        },
+      ],
+    },
+  },
+
   // ---------------------------------------------------------------------------
   // src/core — must run unchanged in Node, in vitest, and in the Tauri webview.
   // ---------------------------------------------------------------------------
@@ -100,11 +118,6 @@ export default tseslint.config(
           message:
             "src/core must not log. Return data and let the harness or the UI decide how to present it.",
         },
-        {
-          name: "Date",
-          message:
-            "src/core must not read the clock. Use the Clock port so runs are deterministic and `now` is read exactly once per run.",
-        },
         { name: "process", message: "Not available in the webview. Use a port." },
         { name: "window", message: "Not available in Node. Use a port." },
         { name: "document", message: "Not available in Node. Use a port." },
@@ -130,6 +143,24 @@ export default tseslint.config(
           property: "random",
           message:
             "src/core must be deterministic. Use the Clock port's jitter source so backoff is reproducible in tests.",
+        },
+        {
+          object: "Date",
+          property: "now",
+          message:
+            "src/core must not read the clock. Use the Clock port, so `now` is read exactly once per run and two jobs cannot land on opposite sides of a day boundary because one was processed later.",
+        },
+      ],
+      // Bans reading the clock without banning Date outright. `Date.parse` and
+      // `Date.UTC` are pure string/number maths and are exactly what the source
+      // clients need to turn a published-at string into epoch ms; it is
+      // `new Date()` and `Date.now()` that make a run non-reproducible.
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "NewExpression[callee.name='Date']",
+          message:
+            "src/core must not construct Dates. Use the Clock port for the current time, and Date.parse(...) for turning a source's timestamp string into epoch milliseconds.",
         },
       ],
     },

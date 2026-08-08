@@ -1,0 +1,347 @@
+import type { Db, SqlValue } from "../ports.ts";
+import type { Job, Profile, SourceId, WatchlistEntry } from "../types.ts";
+
+/**
+ * Thin data access. Hand-written SQL, no ORM, no query builder (constraint 7).
+ *
+ * SQL here is written with `?` placeholders. The Node adapter passes them
+ * through; the Tauri adapter rewrites them to $1/$2 because plugin-sql expects
+ * that dialect. Core never sees the difference.
+ */
+
+// -----------------------------------------------------------------------------
+// Jobs
+// -----------------------------------------------------------------------------
+
+interface JobRow {
+  id: string;
+  source: string;
+  external_id: string;
+  title: string;
+  company: string;
+  location: string | null;
+  remote: number | null;
+  salary_min: number | null;
+  salary_max: number | null;
+  salary_currency: string | null;
+  salary_interval: string | null;
+  url: string;
+  posted_at: number | null;
+  posted_at_is_estimated: number;
+  description_text: string;
+  raw: string;
+  embed_hash: string | null;
+  first_seen_at: number;
+  last_seen_at: number;
+  dedupe_key: string;
+  canonical_id: string | null;
+}
+
+function rowToJob(row: JobRow): Job {
+  return {
+    id: row.id,
+    source: row.source as SourceId,
+    externalId: row.external_id,
+    title: row.title,
+    company: row.company,
+    location: row.location,
+    // SQLite has no boolean. null stays null — it means "source did not say".
+    remote: row.remote === null ? null : row.remote !== 0,
+    salaryMin: row.salary_min,
+    salaryMax: row.salary_max,
+    salaryCurrency: row.salary_currency,
+    salaryInterval: row.salary_interval as Job["salaryInterval"],
+    url: row.url,
+    postedAt: row.posted_at,
+    postedAtIsEstimated: row.posted_at_is_estimated !== 0,
+    descriptionText: row.description_text,
+    raw: row.raw,
+    firstSeenAt: row.first_seen_at,
+    lastSeenAt: row.last_seen_at,
+    dedupeKey: row.dedupe_key,
+    canonicalId: row.canonical_id,
+  };
+}
+
+const UPSERT_JOB = `
+INSERT INTO jobs (
+  id, source, external_id, title, company, location, remote,
+  salary_min, salary_max, salary_currency, salary_interval,
+  url, posted_at, posted_at_is_estimated, description_text, raw, embed_hash,
+  first_seen_at, last_seen_at, dedupe_key, canonical_id
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT(id) DO UPDATE SET
+  title                  = excluded.title,
+  company                = excluded.company,
+  location               = excluded.location,
+  remote                 = excluded.remote,
+  salary_min             = excluded.salary_min,
+  salary_max             = excluded.salary_max,
+  salary_currency        = excluded.salary_currency,
+  salary_interval        = excluded.salary_interval,
+  url                    = excluded.url,
+  posted_at              = excluded.posted_at,
+  posted_at_is_estimated = excluded.posted_at_is_estimated,
+  description_text       = excluded.description_text,
+  raw                    = excluded.raw,
+  embed_hash             = excluded.embed_hash,
+  last_seen_at           = excluded.last_seen_at,
+  dedupe_key             = excluded.dedupe_key
+`;
+// first_seen_at is deliberately absent from the UPDATE list. It is the fallback
+// used when a source gives no posting date, so overwriting it on every run would
+// make every job permanently look brand new.
+
+function jobToParams(job: Job): readonly SqlValue[] {
+  return [
+    job.id,
+    job.source,
+    job.externalId,
+    job.title,
+    job.company,
+    job.location,
+    job.remote === null ? null : job.remote ? 1 : 0,
+    job.salaryMin,
+    job.salaryMax,
+    job.salaryCurrency,
+    job.salaryInterval,
+    job.url,
+    job.postedAt,
+    job.postedAtIsEstimated ? 1 : 0,
+    job.descriptionText,
+    job.raw,
+    null, // embed_hash is set later, once the embed text is built
+    job.firstSeenAt,
+    job.lastSeenAt,
+    job.dedupeKey,
+    job.canonicalId,
+  ];
+}
+
+export async function upsertJobs(db: Db, jobs: readonly Job[]): Promise<void> {
+  if (jobs.length === 0) return;
+  await db.runMany(UPSERT_JOB, jobs.map(jobToParams));
+}
+
+/** Ids that already exist, so a run can report how many were genuinely new. */
+export async function existingJobIds(
+  db: Db,
+  ids: readonly string[],
+): Promise<ReadonlySet<string>> {
+  if (ids.length === 0) return new Set();
+  const found = new Set<string>();
+  // Chunked to stay well under SQLite's default 999-variable limit.
+  const CHUNK = 400;
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    const chunk = ids.slice(i, i + CHUNK);
+    const holes = chunk.map(() => "?").join(", ");
+    const rows = await db.all<{ id: string }>(
+      `SELECT id FROM jobs WHERE id IN (${holes})`,
+      chunk,
+    );
+    for (const row of rows) found.add(row.id);
+  }
+  return found;
+}
+
+/** Every job that is not a collapsed duplicate. */
+export async function listRankableJobs(db: Db): Promise<Job[]> {
+  const rows = await db.all<JobRow>(
+    "SELECT * FROM jobs WHERE canonical_id IS NULL ORDER BY id",
+  );
+  return rows.map(rowToJob);
+}
+
+export async function setCanonical(
+  db: Db,
+  pairs: readonly (readonly [duplicateId: string, canonicalId: string])[],
+): Promise<void> {
+  if (pairs.length === 0) return;
+  await db.runMany(
+    "UPDATE jobs SET canonical_id = ? WHERE id = ?",
+    pairs.map(([dup, canonical]) => [canonical, dup]),
+  );
+}
+
+export async function setEmbedHashes(
+  db: Db,
+  pairs: readonly (readonly [jobId: string, embedHash: string])[],
+): Promise<void> {
+  if (pairs.length === 0) return;
+  await db.runMany(
+    "UPDATE jobs SET embed_hash = ? WHERE id = ?",
+    pairs.map(([id, hash]) => [hash, id]),
+  );
+}
+
+// -----------------------------------------------------------------------------
+// Embeddings
+// -----------------------------------------------------------------------------
+
+export async function loadEmbeddings(
+  db: Db,
+  modelId: string,
+  hashes: readonly string[],
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  if (hashes.length === 0) return out;
+  const CHUNK = 400;
+  for (let i = 0; i < hashes.length; i += CHUNK) {
+    const chunk = hashes.slice(i, i + CHUNK);
+    const holes = chunk.map(() => "?").join(", ");
+    const rows = await db.all<{ content_hash: string; vector: string }>(
+      `SELECT content_hash, vector FROM embeddings
+        WHERE model_id = ? AND content_hash IN (${holes})`,
+      [modelId, ...chunk],
+    );
+    for (const row of rows) out.set(row.content_hash, row.vector);
+  }
+  return out;
+}
+
+export async function saveEmbeddings(
+  db: Db,
+  modelId: string,
+  dim: number,
+  now: number,
+  entries: readonly (readonly [contentHash: string, encodedVector: string])[],
+): Promise<void> {
+  if (entries.length === 0) return;
+  await db.runMany(
+    `INSERT INTO embeddings (content_hash, model_id, dim, vector, created_at)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(content_hash, model_id) DO UPDATE SET
+       vector = excluded.vector, dim = excluded.dim, created_at = excluded.created_at`,
+    entries.map(([hash, vector]) => [hash, modelId, dim, vector, now]),
+  );
+}
+
+// -----------------------------------------------------------------------------
+// Source state (ETag / Last-Modified)
+// -----------------------------------------------------------------------------
+
+export interface SourceState {
+  readonly etag: string | null;
+  readonly lastModified: string | null;
+}
+
+export async function getSourceState(
+  db: Db,
+  sourceKey: string,
+): Promise<SourceState | null> {
+  const rows = await db.all<{ etag: string | null; last_modified: string | null }>(
+    "SELECT etag, last_modified FROM source_state WHERE source_key = ?",
+    [sourceKey],
+  );
+  const row = rows[0];
+  if (row === undefined) return null;
+  return { etag: row.etag, lastModified: row.last_modified };
+}
+
+export async function putSourceState(
+  db: Db,
+  sourceKey: string,
+  state: SourceState,
+  now: number,
+): Promise<void> {
+  await db.run(
+    `INSERT INTO source_state (source_key, etag, last_modified, fetched_at)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT(source_key) DO UPDATE SET
+       etag = excluded.etag,
+       last_modified = excluded.last_modified,
+       fetched_at = excluded.fetched_at`,
+    [sourceKey, state.etag, state.lastModified, now],
+  );
+}
+
+// -----------------------------------------------------------------------------
+// Profile
+// -----------------------------------------------------------------------------
+
+export async function saveProfile(
+  db: Db,
+  profile: Profile,
+  now: number,
+  embedding: string | null,
+  embedModel: string | null,
+): Promise<void> {
+  await db.run(
+    `INSERT INTO profile (id, json, embedding, embed_model, updated_at)
+     VALUES (1, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       json = excluded.json,
+       embedding = excluded.embedding,
+       embed_model = excluded.embed_model,
+       updated_at = excluded.updated_at`,
+    [JSON.stringify(profile), embedding, embedModel, now],
+  );
+}
+
+// -----------------------------------------------------------------------------
+// Watchlist
+// -----------------------------------------------------------------------------
+
+export async function seedWatchlist(
+  db: Db,
+  entries: readonly WatchlistEntry[],
+  now: number,
+): Promise<void> {
+  if (entries.length === 0) return;
+  await db.runMany(
+    `INSERT INTO watchlist (ats, slug, company_label, source, sector, note, added_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(ats, slug) DO UPDATE SET
+       company_label = excluded.company_label,
+       sector = excluded.sector,
+       note = excluded.note`,
+    entries.map((e) => [
+      e.ats,
+      e.slug,
+      e.companyLabel,
+      e.source,
+      e.sector,
+      e.note,
+      now,
+    ]),
+  );
+}
+
+export async function listWatchlist(db: Db): Promise<WatchlistEntry[]> {
+  const rows = await db.all<{
+    ats: string;
+    slug: string;
+    company_label: string;
+    source: string;
+    sector: string | null;
+    note: string | null;
+  }>(
+    "SELECT ats, slug, company_label, source, sector, note FROM watchlist ORDER BY ats, slug",
+  );
+  return rows.map((r) => ({
+    ats: r.ats as WatchlistEntry["ats"],
+    slug: r.slug,
+    companyLabel: r.company_label,
+    source: r.source as WatchlistEntry["source"],
+    sector: r.sector,
+    note: r.note,
+  }));
+}
+
+// -----------------------------------------------------------------------------
+// Runs
+// -----------------------------------------------------------------------------
+
+export async function saveRun(
+  db: Db,
+  id: string,
+  startedAt: number,
+  finishedAt: number,
+  report: unknown,
+): Promise<void> {
+  await db.run(
+    `INSERT INTO runs (id, started_at, finished_at, report) VALUES (?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET finished_at = excluded.finished_at, report = excluded.report`,
+    [id, startedAt, finishedAt, JSON.stringify(report)],
+  );
+}
