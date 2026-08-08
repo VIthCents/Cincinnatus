@@ -1,0 +1,46 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# --- Cincinnatus ---
+
+# Local database + anything you point --db at. NEVER commit: this can hold a real resume.
+.data/
+
+# API keys. The harness reads USAJOBS_API_KEY / USAJOBS_USER_AGENT from here.
+.env
+.env.*
+!.env.example
+
+# TypeScript project-reference build info
+.tsbuild/
+*.tsbuildinfo
+
+# Local embedding model cache (~23 MB). Kept out of node_modules so pnpm
+# reinstalls do not force a re-download.
+.models/
+
+# Test + coverage output
+coverage/
+
