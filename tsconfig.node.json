@@ -1,10 +1,11 @@
 {
+  // Everything that runs under Node: the CLI harness, the tests, and Vite's
+  // own config. Node globals are available here and nowhere else in src/.
+  "extends": "./tsconfig.json",
   "compilerOptions": {
-    "composite": true,
-    "skipLibCheck": true,
-    "module": "ESNext",
-    "moduleResolution": "bundler",
-    "allowSyntheticDefaultImports": true
+    "lib": ["ES2023"],
+    "types": ["node"],
+    "noEmit": true
   },
-  "include": ["vite.config.ts"]
+  "include": ["scripts", "tests", "src/core", "vite.config.ts"]
 }

@@ -1,0 +1,12 @@
+{
+  // Webview code. DOM is available here; Node is not.
+  // src/core is included because the UI imports from it, but core is
+  // independently checked by tsconfig.core.json under stricter libs.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": [],
+    "noEmit": true
+  },
+  "include": ["src/ui", "src/core"]
+}

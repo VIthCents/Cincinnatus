@@ -1,0 +1,20 @@
+{
+  // THE BOUNDARY CONFIG. This is layer 1 of 3 that keeps src/core portable.
+  //
+  // `lib: ["ES2023"]` with no DOM and `types: []` with no @types/node means
+  // `fetch`, `console`, `document`, `window`, `process`, `Buffer`, and
+  // `require` are all *undeclared identifiers* here — a compile error, not a
+  // convention. That is what lets the same code run under Node (the Phase 1
+  // harness), under vitest, and later inside the Tauri webview.
+  //
+  // If you find yourself wanting to relax this: don't. Add a port to
+  // src/core/ports.ts and implement it in an adapter instead.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2023"],
+    "types": [],
+    "jsx": "preserve",
+    "noEmit": true
+  },
+  "include": ["src/core"]
+}

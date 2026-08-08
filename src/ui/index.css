@@ -1,0 +1,19 @@
+@import "tailwindcss";
+
+/* Cincinnatus is used by people who may be on an old laptop, on a phone-sized
+   window, or using a screen reader. Defaults are therefore large and
+   high-contrast rather than dense. Do not shrink these without a reason. */
+:root {
+  font-size: 18px;
+}
+
+/* Respect the OS "reduce motion" setting. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
