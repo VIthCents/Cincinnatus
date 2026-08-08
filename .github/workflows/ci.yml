@@ -1,0 +1,109 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A newer push to the same branch makes an in-flight run pointless.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Lint, typecheck, test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm lint
+
+      # Runs on Linux while development happens on Windows, so this is also the
+      # job that catches a line-ending regression in .gitattributes.
+      - run: pnpm format:check
+
+      # Three configs in sequence, not one. tsconfig.core.json is the one that
+      # matters: it gives src/core no DOM lib and no Node types, so a Tauri or
+      # Node import there fails the build rather than being caught in review.
+      - run: pnpm typecheck
+
+      # No network. Everything runs against recorded fixtures, under
+      # TZ=Pacific/Kiritimati so date bugs are not masked by a UTC runner.
+      - run: pnpm test
+
+  commits:
+    name: Conventional commits
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Validates every commit message on the branch, not just the PR title.
+      # A PR-title-only check does nothing for direct pushes and does not
+      # enforce what "conventional commits" actually means.
+      - name: Check commit messages
+        run: |
+          fail=0
+          pattern='^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([a-z0-9._/-]+\))?!?: .{1,}'
+          while IFS= read -r subject; do
+            case "$subject" in
+              "Merge "*) continue ;;
+            esac
+            if ! printf '%s' "$subject" | grep -Eq "$pattern"; then
+              echo "::error::Not a conventional commit: $subject"
+              fail=1
+            fi
+          done < <(git log --format=%s "origin/${{ github.base_ref }}..HEAD")
+          if [ "$fail" -ne 0 ]; then
+            echo "Expected e.g.  feat(sources): add lever client"
+            exit 1
+          fi
+          echo "All commit messages look right."
+
+  build:
+    name: Build (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - run: pnpm install --frozen-lockfile
+
+      # Artifacts are unsigned. Signing (Azure Trusted Signing + Apple
+      # notarization) is required before public distribution and lands in
+      # Phase 4 — see docs/SPEC.md section 9.
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

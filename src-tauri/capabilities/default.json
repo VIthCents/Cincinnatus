@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capability for the main window",
+  "description": "Main window. NOTE: sql:allow-execute is listed separately on purpose — sql:default is only [allow-close, allow-load, allow-select], so without it every INSERT/UPDATE/CREATE from JS is rejected while reads keep working, which presents as a schema bug rather than a permissions one.",
   "windows": ["main"],
-  "permissions": ["core:default", "opener:default"]
+  "permissions": ["core:default", "opener:default", "sql:default", "sql:allow-execute"]
 }
