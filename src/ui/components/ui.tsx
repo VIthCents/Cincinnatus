@@ -532,29 +532,38 @@ export function TabBar<Id extends string>({
   tabs,
   active,
   onChange,
-  onKeyDown,
   className = "",
 }: {
   tabs: readonly TabDescriptor<Id>[];
   active: Id | null;
   onChange: (id: Id) => void;
-  /** Arrow keys, so the caller can move selection (accessibility.md). */
-  onKeyDown?: (key: string) => void;
   className?: string;
 }) {
+  /**
+   * Roving tabindex: only the selected tab is in the tab order, and the arrow
+   * keys move between them (guidelines/accessibility.md). Focus is moved by
+   * hand here rather than in a ref, because a ref that focuses on every render
+   * would keep yanking focus back during a long search's progress updates.
+   */
+  function onKeyDown(e: React.KeyboardEvent<HTMLDivElement>): void {
+    const step = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+    if (step === 0) return;
+    e.preventDefault();
+
+    const from = active === null ? 0 : tabs.findIndex((t) => t.id === active);
+    const next = tabs[(from + step + tabs.length) % tabs.length];
+    if (next === undefined) return;
+
+    onChange(next.id);
+    document.getElementById(`tab-${next.id}`)?.focus();
+  }
+
   return (
     <div
       className={["cn-tabs", className].filter(Boolean).join(" ")}
       role="tablist"
       aria-label="Main sections"
-      onKeyDown={(e) => {
-        if (onKeyDown === undefined) return;
-        if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
-        // The newly selected tab is the only one in the tab order, so moving
-        // focus to it is what makes the arrow keys feel like a selection.
-        e.preventDefault();
-        onKeyDown(e.key);
-      }}
+      onKeyDown={onKeyDown}
     >
       {tabs.map((t) => (
         <button
@@ -566,16 +575,6 @@ export function TabBar<Id extends string>({
           aria-selected={active === t.id}
           aria-controls={`panel-${t.id}`}
           tabIndex={active === t.id ? 0 : -1}
-          ref={
-            active === t.id
-              ? (el) => {
-                  // Only steal focus if focus is already inside the tab list —
-                  // otherwise clicking a job card would yank it back up here.
-                  if (el !== null && el.parentElement?.contains(document.activeElement))
-                    el.focus();
-                }
-              : undefined
-          }
           onClick={() => onChange(t.id)}
         >
           {t.icon !== undefined ? <Icon name={t.icon} size={22} /> : null}

@@ -570,9 +570,19 @@ ranking floor to core.
 
 **Consequence.** On the current scoring function, a 75 floor for "strong" would essentially never fire and
 a 35 floor would hide most of the list — the app would present as broken rather than as honest. This is a
-divergence to revisit, not a rejection: the numbers are right for a score with a wider spread, and a live
-run's fit distribution (already reported per run) is the evidence needed to either recalibrate
-`fitFromSimilarity` or move the bands. **TODO(matching): revisit in Phase 4 with a real distribution.**
+divergence to revisit, not a rejection: the numbers are right for a score with a wider spread.
+
+**Measured, 2026-08-09.** A live run (25 sources, 5,514 jobs, 150 embedded under `--max-embed`) put the
+fit range at **0.0 to 38.8**. The best job in the list scored 27. So under the design system's thresholds
+nothing would have been _strong_ or even _good_, and a 35 floor would have dropped the entire top five.
+Under ours, everything reads **Fair match** — the badge is honest but carries no information, which is the
+distribution collapse `core/pipeline/score.ts` warns about, now observed rather than predicted.
+
+The fix is not the thresholds at either end: it is `fitFromSimilarity`, which maps a cosine that in
+practice occupies 0.0–0.4 onto 0–100 linearly and so uses two fifths of its range. Rescaling that band
+(or blending in the lexical signal `whyWords` already computes) is what would make three levels mean three
+things. **TODO(matching): recalibrate `fitFromSimilarity` in Phase 4 against a full-corpus distribution,
+then move the bands to the design system's 35/55/75.**
 
 ---
 

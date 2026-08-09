@@ -258,11 +258,15 @@ function ageLabel(days: number): string {
   return `${whole} days ago`;
 }
 
+/**
+ * The same three words and the same bands the app shows (ui/app/format.ts).
+ * The harness prints the number alongside because it is a developer tool; the
+ * app never does.
+ */
 function matchLabel(fit: number): string {
   if (fit >= 55) return "Strong match";
   if (fit >= 40) return "Good match";
-  if (fit >= 25) return "Possible match";
-  return "Weak match";
+  return "Fair match";
 }
 
 function printRanked(ranked: readonly RankedJob[], top: number): void {

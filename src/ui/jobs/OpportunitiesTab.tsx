@@ -344,9 +344,18 @@ function JobCard({
         <Fact
           icon="location_on"
           known={job.location !== null}
-          value={`${job.location ?? ""}${ranked.withinReach ? "" : " · outside your area"}`}
+          value={job.location ?? ""}
           missing="Location not listed"
         />
+        {/* Its own fact, not a suffix on the location: a widened job with no
+            location listed still came from outside the person's radius, and
+            hanging this off the location would lose it exactly then. */}
+        {!ranked.withinReach && (
+          <span className="is-unknown">
+            <Icon name="info" size={18} />
+            Outside your area
+          </span>
+        )}
         <Fact
           icon="payments"
           known={salary !== null}

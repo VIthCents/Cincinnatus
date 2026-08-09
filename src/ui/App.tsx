@@ -173,8 +173,6 @@ function BootRetryButton() {
  */
 type MainTab = Extract<Tab, "chat" | "jobs">;
 
-const MAIN_TABS: readonly MainTab[] = ["chat", "jobs"];
-
 function MainTabs({ jobCount }: { jobCount: number | null }) {
   const state = useAppState();
   const dispatch = useAppDispatch();
@@ -184,15 +182,6 @@ function MainTabs({ jobCount }: { jobCount: number | null }) {
     <TabBar<MainTab>
       active={active}
       onChange={(tab) => dispatch({ type: "tab", tab })}
-      // Arrow keys move between tabs, Tab moves into the panel
-      // (guidelines/accessibility.md).
-      onKeyDown={(key) => {
-        if (key !== "ArrowLeft" && key !== "ArrowRight") return;
-        const from = active === null ? 0 : MAIN_TABS.indexOf(active);
-        const step = key === "ArrowRight" ? 1 : -1;
-        const next = MAIN_TABS[(from + step + MAIN_TABS.length) % MAIN_TABS.length]!;
-        dispatch({ type: "tab", tab: next });
-      }}
       tabs={[
         { id: "chat", label: "Chat", icon: "forum" },
         { id: "jobs", label: "Opportunities", icon: "work", count: jobCount },
