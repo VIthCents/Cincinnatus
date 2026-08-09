@@ -216,8 +216,10 @@ async function main(): Promise<number> {
     out("  --top <n>             how many jobs to print (default 25)");
     out("  --max-embed <n>       cap new embeddings; for fast iteration only");
     out("  --usajobs-days <n>    how far back to search federal jobs (default 7)");
-    out("  --offline             replay recorded fixtures; no network");
-    out("  --capture             run live and record responses as fixtures");
+    out("  --capture             run live and record every response to fixtures/http/");
+    out("  --offline             replay what --capture recorded; no network at all");
+    out("                        (run --capture once first; the recordings are");
+    out("                         local and gitignored, they can be ~30 MB)");
     out("  --verify-watchlist    check every starter board still resolves");
     return 0;
   }

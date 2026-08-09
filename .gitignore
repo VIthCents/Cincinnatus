@@ -44,3 +44,9 @@ dist-ssr
 # Test + coverage output
 coverage/
 
+# Full-run HTTP recordings from `pnpm harness --capture`, used by --offline.
+# Local only: a whole-watchlist capture is tens of megabytes. The small,
+# hand-checked fixtures the test suite runs against are committed under
+# fixtures/greenhouse and fixtures/usajobs instead.
+fixtures/http/
+
