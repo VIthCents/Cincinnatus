@@ -228,6 +228,66 @@ stated location rather than silently returning a long uncommutable list.
 
 ---
 
+## 2026-08-08 — USAJobs: one query per title, and no location sent
+
+**Context.** Written against the documented contract, the USAJobs client returned zero federal jobs
+while reporting success. Two causes, both found by probing the live API rather than re-reading the docs.
+
+`Keyword` **ANDs its terms and supports no OR operator**. Measured: `truck driver` → 14 results;
+`Truck Driver Logistics Coordinator Fleet Supervisor` → 0; `"Truck Driver" OR "Logistics Coordinator"`
+→ 0; unquoted `OR` → 0. Joining a profile's titles into one query does not widen the search, it silently
+empties it — and silently, because an empty result set is not an error.
+
+Separately, `LocationName` is severe. `truck driver` returns 14 postings nationally and **0** within 50
+miles of Fayetteville NC. Every `LocationName` form was tried (city + state code, city + full state
+name, state alone, with and without `Radius`); alone it works fine (Fayetteville → 210), so this is the
+intersection genuinely being empty, not a malformed parameter.
+
+**Decision.** Issue one search per title, capped at five, and union the results, deduplicating on the job
+id. Do not send `LocationName` or `Radius` at all.
+
+**Consequence.** Federal results went from 0 to 13 on the sample profile. Not sending the location is
+also the more consistent design — every other source is fetched broadly and filtered locally in
+`rank.ts`, where the user can be _told_ the list was widened — and it means OPM learns which job titles
+someone is searching for but not where they live, which is a small constraint-3 win.
+
+---
+
+## 2026-08-08 — The allowlist matches a strict shape rather than parsing a URL
+
+**Context.** `assertAllowed` needs a hostname, and `src/core` has no URL parser: WHATWG `URL` lives in
+`lib.dom`, which core deliberately does not load. Adding the DOM lib to get one would defeat the
+boundary, and the obvious alternative — a permissive regex plus a suffix check — is how host-validation
+bugs happen. `https://boards-api.greenhouse.io@evil.test/` is a request to **evil.test**, and both a
+`startsWith` and an `includes` check wave it through.
+
+**Decision.** Match one narrow shape: `https://` then a plain lower-case DNS name then an optional
+whitespace-free path. Reject everything else — userinfo, explicit ports, IP literals, uppercase,
+unicode, `http://`.
+
+**Consequence.** For a security gate, rejecting the unusual beats interpreting it, and we never
+legitimately need any of the rejected forms. Query strings are built with `encodeURIComponent` via a
+small `buildQuery` helper, since `URLSearchParams` is unavailable for the same reason. Both the
+userinfo attack and the lookalike-host case are covered by tests.
+
+---
+
+## 2026-08-08 — greenhouse/air is Air, not Govini
+
+**Context.** Research listed the slug `air` as Govini. The board's own API reports its name as `Air`, and
+a posting's body confirms it: "Air is the leader in Enterprise Readiness", serving government agencies,
+with offices in Arlington VA and Pittsburgh PA.
+
+**Decision.** Label it Air. More importantly, `--verify-watchlist` now requires an **exact** match
+against a `board_name` recorded per entry, rather than a fuzzy comparison against our display label.
+
+**Consequence.** A veteran would have seen the wrong employer on a job card. The fuzzy check that
+originally caught this would also have passed several wrong-company slugs that return HTTP 200 with real
+postings — `greenhouse/archer` is a veterinary clinic, `ashby/flock` a UK motor insurer. Exact matching
+means a board that is sold, renamed, or reassigned fails loudly instead of quietly mislabelling jobs.
+
+---
+
 ## 2026-08-08 — First-run cost and location filtering
 
 **Context.** Two product choices that the SPEC leaves open and that materially change how the app feels.
