@@ -1,0 +1,296 @@
+{
+  "schema_version": 1,
+  "verified_on": "2026-08-08",
+  "about": "Employer job boards Cincinnatus checks out of the box, so the app returns real results with zero setup. Every slug was verified live: HTTP 200, a non-empty jobs array, and a board name matching the intended employer. The name check matters - several plausible slugs return 200 with real postings but belong to a different company entirely (greenhouse/archer is a veterinary clinic, ashby/flock is a UK motor insurer). Re-verify with: pnpm harness --verify-watchlist",
+  "coverage_gap": "Many employers a veteran would name first - Lockheed Martin, Northrop Grumman, RTX, Leidos, Booz Allen, GDIT, USAA, Peraton, CACI, V2X - run on Workday, BrassRing, Phenom or iCIMS. None of those is an approved source, and reaching them would mean scraping, which this project does not do. This list is therefore not a complete picture of veteran hiring, and the app says so rather than implying otherwise.",
+  "boards": [
+    {
+      "ats": "greenhouse",
+      "slug": "andurilindustries",
+      "company_label": "Anduril Industries",
+      "board_name": "Anduril Industries",
+      "source": "starter",
+      "sector": "defense",
+      "note": "Defense manufacturing and field operations; hires heavily for technicians, machinists and test operators, not only engineers."
+    },
+    {
+      "ats": "greenhouse",
+      "slug": "rocketlab",
+      "company_label": "Rocket Lab",
+      "board_name": "Rocket Lab Corporation",
+      "source": "starter",
+      "sector": "aerospace",
+      "note": "Launch and spacecraft manufacturing; avionics and propulsion technician roles map closely to military aviation maintenance."
+    },
+    {
+      "ats": "greenhouse",
+      "slug": "relativity",
+      "company_label": "Relativity Space",
+      "board_name": "Relativity Space",
+      "source": "starter",
+      "sector": "aerospace",
+      "note": "Rocket manufacturing; welding, machining and quality inspection roles."
+    },
+    {
+      "ats": "greenhouse",
+      "slug": "axon",
+      "company_label": "Axon",
+      "board_name": "Axon",
+      "source": "starter",
+      "sector": "public safety",
+      "note": "Law enforcement technology; strong fit for military police and security backgrounds."
+    },
+    {
+      "ats": "greenhouse",
+      "slug": "verkada",
+      "company_label": "Verkada",
+      "board_name": "Verkada",
+      "source": "starter",
+      "sector": "security",
+      "note": "Physical security systems; field installation and support technician roles."
+    },
+    {
+      "ats": "greenhouse",
+      "slug": "samsara",
+      "company_label": "Samsara",
+      "board_name": "Samsara",
+      "source": "starter",
+      "sector": "fleet operations",
+      "note": "Fleet telematics; relevant to motor transport and logistics experience."
+    },
+    {
+      "ats": "greenhouse",
+      "slug": "flexport",
+      "company_label": "Flexport",
+      "board_name": "Flexport",
+      "source": "starter",
+      "sector": "logistics",
+      "note": "Freight forwarding and supply chain; direct fit for 92Y-type supply and logistics work."
+    },
+    {
+      "ats": "greenhouse",
+      "slug": "redwoodmaterials",
+      "company_label": "Redwood Materials",
+      "board_name": "Redwood Materials",
+      "source": "starter",
+      "sector": "manufacturing",
+      "note": "Battery recycling; production operator and maintenance technician roles."
+    },
+    {
+      "ats": "greenhouse",
+      "slug": "twosixtechnologies",
+      "company_label": "Two Six Technologies",
+      "board_name": "Two Six Technologies",
+      "source": "starter",
+      "sector": "gov tech",
+      "note": "National security technology; many roles expect or sponsor a clearance."
+    },
+    {
+      "ats": "greenhouse",
+      "slug": "epirus",
+      "company_label": "Epirus",
+      "board_name": "Epirus",
+      "source": "starter",
+      "sector": "defense",
+      "note": "Directed energy systems; test and integration technician roles."
+    },
+    {
+      "ats": "greenhouse",
+      "slug": "vannevarlabs",
+      "company_label": "Vannevar Labs",
+      "board_name": "Vannevar",
+      "source": "starter",
+      "sector": "gov tech",
+      "note": "Defense software; intelligence analysis backgrounds transfer well."
+    },
+    {
+      "ats": "greenhouse",
+      "slug": "mark43",
+      "company_label": "Mark43",
+      "board_name": "Mark43",
+      "source": "starter",
+      "sector": "public safety",
+      "note": "Public safety records systems; law enforcement and dispatch experience is valued."
+    },
+    {
+      "ats": "greenhouse",
+      "slug": "air",
+      "company_label": "Air",
+      "board_name": "Air",
+      "source": "starter",
+      "sector": "gov tech",
+      "note": "Defense and government readiness software (Arlington VA and Pittsburgh PA). The board slug is air and the company now trades as Air; earlier sources list it as Govini."
+    },
+    {
+      "ats": "greenhouse",
+      "slug": "kairospower",
+      "company_label": "Kairos Power",
+      "board_name": "Kairos Power",
+      "source": "starter",
+      "sector": "energy",
+      "note": "Advanced nuclear; Navy nuclear ratings transfer directly."
+    },
+    {
+      "ats": "greenhouse",
+      "slug": "scaleai",
+      "company_label": "Scale AI",
+      "board_name": "Scale AI",
+      "source": "starter",
+      "sector": "gov tech",
+      "note": "Has a dedicated federal and defense business."
+    },
+    {
+      "ats": "greenhouse",
+      "slug": "planetlabs",
+      "company_label": "Planet Labs",
+      "board_name": "Planet",
+      "source": "starter",
+      "sector": "aerospace",
+      "note": "Satellite imagery; geospatial and imagery analyst experience transfers."
+    },
+    {
+      "ats": "greenhouse",
+      "slug": "astranis",
+      "company_label": "Astranis",
+      "board_name": "Astranis",
+      "source": "starter",
+      "sector": "aerospace",
+      "note": "Satellite manufacturing; electronics and RF technician roles."
+    },
+    {
+      "ats": "greenhouse",
+      "slug": "vardaspace",
+      "company_label": "Varda Space Industries",
+      "board_name": "Varda Space Industries",
+      "source": "starter",
+      "sector": "aerospace",
+      "note": "In-space manufacturing and reentry; small but growing technician base."
+    },
+    {
+      "ats": "greenhouse",
+      "slug": "ursamajor",
+      "company_label": "Ursa Major",
+      "board_name": "Ursa Major",
+      "source": "starter",
+      "sector": "aerospace",
+      "note": "Rocket propulsion; machining and test operations."
+    },
+    {
+      "ats": "greenhouse",
+      "slug": "silananotechnologies",
+      "company_label": "Sila",
+      "board_name": "Sila",
+      "source": "starter",
+      "sector": "manufacturing",
+      "note": "Battery materials; plant operations and maintenance in Moses Lake, WA."
+    },
+    {
+      "ats": "greenhouse",
+      "slug": "wing",
+      "company_label": "Wing",
+      "board_name": "Wing",
+      "source": "starter",
+      "sector": "aviation",
+      "note": "Drone delivery (Alphabet); UAS operations experience transfers directly."
+    },
+    {
+      "ats": "greenhouse",
+      "slug": "lucidmotors",
+      "company_label": "Lucid Motors",
+      "board_name": "Lucid Motors",
+      "source": "starter",
+      "sector": "manufacturing",
+      "note": "Vehicle manufacturing in Casa Grande, AZ; production and maintenance technicians."
+    },
+    {
+      "ats": "greenhouse",
+      "slug": "hawkeye360",
+      "company_label": "HawkEye 360",
+      "board_name": "HawkEye 360",
+      "source": "starter",
+      "sector": "gov tech",
+      "note": "RF geospatial analytics; signals intelligence backgrounds transfer."
+    },
+    {
+      "ats": "greenhouse",
+      "slug": "slingshotaerospace",
+      "company_label": "Slingshot Aerospace",
+      "board_name": "Slingshot Aerospace",
+      "source": "starter",
+      "sector": "aerospace",
+      "note": "Space situational awareness; Space Force and satellite operations experience."
+    },
+    {
+      "ats": "lever",
+      "slug": "shieldai",
+      "company_label": "Shield AI",
+      "source": "starter",
+      "sector": "defense",
+      "note": "Autonomous aircraft; founded by a Navy SEAL and hires veterans deliberately."
+    },
+    {
+      "ats": "lever",
+      "slug": "palantir",
+      "company_label": "Palantir Technologies",
+      "source": "starter",
+      "sector": "gov tech",
+      "note": "Defense and intelligence software; deployment roles value operational experience."
+    },
+    {
+      "ats": "ashby",
+      "slug": "saronic",
+      "company_label": "Saronic Technologies",
+      "source": "starter",
+      "sector": "defense",
+      "note": "Autonomous surface vessels; maritime and Navy experience transfers directly."
+    },
+    {
+      "ats": "ashby",
+      "slug": "hadrian-automation",
+      "company_label": "Hadrian",
+      "source": "starter",
+      "sector": "manufacturing",
+      "note": "Automated precision machining for aerospace and defense; machinist roles."
+    },
+    {
+      "ats": "ashby",
+      "slug": "helion",
+      "company_label": "Helion Energy",
+      "source": "starter",
+      "sector": "energy",
+      "note": "Fusion energy; electrical and mechanical technician roles."
+    },
+    {
+      "ats": "ashby",
+      "slug": "skydio",
+      "company_label": "Skydio",
+      "source": "starter",
+      "sector": "defense",
+      "note": "Autonomous drones; large public safety and defense business."
+    },
+    {
+      "ats": "ashby",
+      "slug": "applied",
+      "company_label": "Applied Intuition",
+      "source": "starter",
+      "sector": "defense",
+      "note": "Autonomy software with a defense division. Note the slug is 'applied'."
+    },
+    {
+      "ats": "ashby",
+      "slug": "formenergy",
+      "company_label": "Form Energy",
+      "source": "starter",
+      "sector": "manufacturing",
+      "note": "Iron-air batteries; plant roles in Weirton, WV, away from the coasts."
+    },
+    {
+      "ats": "ashby",
+      "slug": "gecko-robotics",
+      "company_label": "Gecko Robotics",
+      "source": "starter",
+      "sector": "industrial",
+      "note": "Robotic industrial inspection; field inspection roles and Navy shipyard work."
+    }
+  ]
+}

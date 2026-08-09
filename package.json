@@ -20,6 +20,7 @@
     "harness": "node scripts/harness.ts"
   },
   "dependencies": {
+    "@huggingface/transformers": "^4.2.0",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-opener": "^2",
     "@tauri-apps/plugin-sql": "^2.4.0",

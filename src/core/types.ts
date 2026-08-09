@@ -24,6 +24,12 @@ export interface WatchlistEntry {
   readonly slug: string;
   /** Human-readable employer name, shown to the user. */
   readonly companyLabel: string;
+  /**
+   * The exact name the board's own API reports, recorded when the slug was
+   * verified. `--verify-watchlist` requires an exact match against this, which
+   * is what catches a slug that has quietly become a different company.
+   */
+  readonly boardName: string | null;
   readonly source: "starter" | "user";
   /** Rough sector, so the starter list can be checked for breadth. */
   readonly sector: string | null;

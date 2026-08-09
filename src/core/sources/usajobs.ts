@@ -25,6 +25,14 @@ const SEARCH_URL = "https://data.usajobs.gov/api/search";
 const RESULTS_PER_PAGE = 500;
 const MAX_PAGES = 20;
 
+/**
+ * How many of the profile's titles to search.
+ *
+ * Each one is a separate round trip (see below), so this bounds both the run
+ * time and how much we ask of a free government API.
+ */
+const MAX_KEYWORDS = 5;
+
 export interface UsaJobsAuth {
   readonly apiKey: string;
   /** The email the key was registered with. */
@@ -33,9 +41,16 @@ export interface UsaJobsAuth {
 
 export interface UsaJobsOptions {
   readonly auth: UsaJobsAuth;
+  /**
+   * Civilian job titles. Each is searched separately and the results unioned.
+   *
+   * `Keyword` ANDs its terms and supports no OR operator — verified against the
+   * live API: "truck driver" returns 14 results, and
+   * "Truck Driver Logistics Coordinator Fleet Supervisor" returns 0, as does
+   * every quoted or explicit-OR form. Joining titles therefore does not widen
+   * the search, it silently empties it.
+   */
   readonly keywords: readonly string[];
-  readonly locationName: string | null;
-  readonly radiusMiles: number | null;
   /** DatePosted, in days. The API accepts 0–60. */
   readonly windowDays: number;
 }
@@ -155,19 +170,24 @@ export function normalizeUsaJobsPosting(
   };
 }
 
-export function buildSearchUrl(options: UsaJobsOptions, page: number): string {
+export function buildSearchUrl(
+  options: UsaJobsOptions,
+  keyword: string,
+  page: number,
+): string {
   const params: [string, string][] = [];
 
-  if (options.keywords.length > 0) {
-    params.push(["Keyword", options.keywords.join(" ")]);
-  }
-  if (options.locationName !== null) {
-    params.push(["LocationName", options.locationName]);
-    // Radius is ignored unless LocationName is also present.
-    if (options.radiusMiles !== null) {
-      params.push(["Radius", String(options.radiusMiles)]);
-    }
-  }
+  if (keyword !== "") params.push(["Keyword", keyword]);
+
+  // LocationName is deliberately NOT sent.
+  //
+  // Two reasons. Practically, the API's location filter is severe: "truck
+  // driver" returns 14 postings nationally and 0 within 50 miles of
+  // Fayetteville, NC, so sending it silently empties the federal results for
+  // most of the country. Structurally, we already treat every other source the
+  // same way — fetch broadly, then filter and widen locally in rank.ts, where
+  // the user can be told what happened. Not sending it also means OPM learns
+  // the job titles someone is searching for but not where they live.
 
   params.push(["ResultsPerPage", String(RESULTS_PER_PAGE)]);
   params.push(["Page", String(page)]);
@@ -199,44 +219,52 @@ export function createUsaJobsSource(options: UsaJobsOptions): Source {
       const jobs: Job[] = [];
       const seen = new Set<string>();
 
-      for (let page = 1; page <= MAX_PAGES; page++) {
-        const url = buildSearchUrl(options, page);
+      // One search per title, unioned. Keyword ANDs its terms and has no OR
+      // operator, so a single combined query returns nothing at all.
+      const keywords = options.keywords.slice(0, MAX_KEYWORDS);
+      if (keywords.length === 0) keywords.push("");
 
-        const response = await ctx.http.get({
-          url,
-          headers: {
-            host: "data.usajobs.gov",
-            "user-agent": options.auth.userAgentEmail,
-            "authorization-key": options.auth.apiKey,
-          },
-        });
+      for (const keyword of keywords) {
+        for (let page = 1; page <= MAX_PAGES; page++) {
+          const response = await ctx.http.get({
+            url: buildSearchUrl(options, keyword, page),
+            headers: {
+              host: "data.usajobs.gov",
+              // Must be the email the key was registered with. A generic or
+              // empty User-Agent gets a 403 Akamai HTML page, not JSON.
+              "user-agent": options.auth.userAgentEmail,
+              "authorization-key": options.auth.apiKey,
+            },
+          });
 
-        if (response.status !== 200) {
-          throw new HttpStatusError(
-            response.status,
-            label,
-            response.body.slice(0, 200),
-          );
-        }
-
-        const parsed = JSON.parse(response.body) as SearchResponse;
-        const items = parsed.SearchResult?.SearchResultItems ?? [];
-
-        for (const item of items) {
-          const descriptor = item.MatchedObjectDescriptor;
-          if (descriptor === undefined) continue;
-          const job = normalizeUsaJobsPosting(descriptor, ctx);
-          // A federal announcement is often published twice — once open to the
-          // public, once to status candidates — under the same PositionID.
-          if (job !== null && !seen.has(job.id)) {
-            seen.add(job.id);
-            jobs.push(job);
+          if (response.status !== 200) {
+            throw new HttpStatusError(
+              response.status,
+              label,
+              response.body.slice(0, 200),
+            );
           }
-        }
 
-        // Drive pagination off what actually came back, not off an assumed page
-        // size and not off UserArea.NumberOfPages (which is a string).
-        if (items.length < RESULTS_PER_PAGE) break;
+          const parsed = JSON.parse(response.body) as SearchResponse;
+          const items = parsed.SearchResult?.SearchResultItems ?? [];
+
+          for (const item of items) {
+            const descriptor = item.MatchedObjectDescriptor;
+            if (descriptor === undefined) continue;
+            const job = normalizeUsaJobsPosting(descriptor, ctx);
+            // Deduplicates across keyword queries and within one: a federal
+            // announcement is often published twice, once open to the public
+            // and once to status candidates, under the same PositionID.
+            if (job !== null && !seen.has(job.id)) {
+              seen.add(job.id);
+              jobs.push(job);
+            }
+          }
+
+          // Drive pagination off what actually came back, not off an assumed
+          // page size and not off UserArea.NumberOfPages (which is a string).
+          if (items.length < RESULTS_PER_PAGE) break;
+        }
       }
 
       // The search endpoint does not offer useful conditional-request support.

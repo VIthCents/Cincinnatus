@@ -143,6 +143,7 @@ export const MIGRATIONS: readonly Migration[] = [
          ats           TEXT NOT NULL CHECK (ats IN ('greenhouse', 'lever', 'ashby')),
          slug          TEXT NOT NULL,
          company_label TEXT NOT NULL,
+         board_name    TEXT,
          source        TEXT NOT NULL CHECK (source IN ('starter', 'user')),
          sector        TEXT,
          note          TEXT,

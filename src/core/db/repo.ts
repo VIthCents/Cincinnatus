@@ -289,16 +289,18 @@ export async function seedWatchlist(
 ): Promise<void> {
   if (entries.length === 0) return;
   await db.runMany(
-    `INSERT INTO watchlist (ats, slug, company_label, source, sector, note, added_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO watchlist (ats, slug, company_label, board_name, source, sector, note, added_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(ats, slug) DO UPDATE SET
        company_label = excluded.company_label,
+       board_name = excluded.board_name,
        sector = excluded.sector,
        note = excluded.note`,
     entries.map((e) => [
       e.ats,
       e.slug,
       e.companyLabel,
+      e.boardName,
       e.source,
       e.sector,
       e.note,
@@ -312,16 +314,18 @@ export async function listWatchlist(db: Db): Promise<WatchlistEntry[]> {
     ats: string;
     slug: string;
     company_label: string;
+    board_name: string | null;
     source: string;
     sector: string | null;
     note: string | null;
   }>(
-    "SELECT ats, slug, company_label, source, sector, note FROM watchlist ORDER BY ats, slug",
+    "SELECT ats, slug, company_label, board_name, source, sector, note FROM watchlist ORDER BY ats, slug",
   );
   return rows.map((r) => ({
     ats: r.ats as WatchlistEntry["ats"],
     slug: r.slug,
     companyLabel: r.company_label,
+    boardName: r.board_name,
     source: r.source as WatchlistEntry["source"],
     sector: r.sector,
     note: r.note,
