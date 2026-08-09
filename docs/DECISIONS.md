@@ -608,3 +608,115 @@ stored in `settings`. "Match my computer" keeps following `prefers-color-scheme`
 
 **Consequence.** Printing needed a guard: the print host forces a light three-step ink ramp, or printing
 while the app is in dark mode would put pale grey text on a white page.
+
+---
+
+## 2026-08-09 — Widening triggers on how many nearby jobs are GOOD, not how many exist
+
+**Context.** A CDL truck driver profile (88M/92Y, Fayetteville NC) was shown Axon "Mission Engineer" and
+Samsara sales roles. Measured against a full live run: 5,514 jobs fetched, 5,293 rankable, of which
+**318 passed `isWithinReach`** — and not one was work a driver could be hired into. The 318 were
+overwhelmingly remote-flagged white-collar tech postings; only 21 jobs in the entire corpus are
+physically in North Carolina. Meanwhile the corpus contained a literal **"Class A Driver"** posting
+(Redwood Materials, McCarran NV) that the person was never shown, because `widened = nearby.length < 10`
+and 318 comfortably exceeds 10.
+
+Counting jobs measured the wrong thing: **a plentiful local list and a useless one are the same length.**
+
+**Decision.** `MIN_FIT_FOR_WIDENING = 40` (the "good match" badge band). Widening now asks whether there
+are at least `MIN_RESULTS_BEFORE_WIDENING` nearby jobs _at or above that fit_, so the question the code
+asks is the one the interface answers.
+
+**Consequence.** This is the dominant fix; the other two below are secondary and were measured to change
+nothing on their own. A/B over the same 5,293 stored vectors, counting hireable jobs in the top 25:
+
+| configuration                   | pool  | hireable in top 25             |
+| ------------------------------- | ----- | ------------------------------ |
+| before                          | 318   | 0                              |
+| + floored freshness             | 318   | 0                              |
+| + floored freshness + crosswalk | 318   | 0                              |
+| + quality-aware widening        | 5,293 | 5 — _Class A Driver at rank 2_ |
+
+The widened list is labelled: the design system's "Cincinnatus looked further out" banner and the
+per-card "Outside your area" fact both already existed for exactly this case. A relocation-distance job,
+shown and labelled, beats a local list of jobs the person cannot do.
+
+---
+
+## 2026-08-09 — Freshness is floored; SPEC §5's formula is superseded
+
+**Context.** SPEC §5 specifies `final_score = fit_score * exp(-age_days / 7)`. Measured on the live
+corpus: median job age is **54 days**, p75 is 136 days, and only 9.5% of jobs are under a week old.
+`exp(-age/7)` spans eleven orders of magnitude over the 180-day clamp while `fitScore` spans about
+two-fold, so the product did not blend two signals — it sorted by date. On the jobs a user actually saw,
+**Spearman(final, age) = 0.99 and Spearman(final, fit) = 0.15.** The best semantic match in the corpus
+sat at final-rank 1,921. The constant was also misnamed: `FRESHNESS_HALF_LIFE_DAYS = 7` was used as a
+time constant, making the true half-life 4.85 days.
+
+**Decision.** `freshnessFactor(a) = FLOOR + (1 - FLOOR) * 2 ** (-a / HALF_LIFE)`, with
+`FRESHNESS_FLOOR = 0.75` and `FRESHNESS_HALF_LIFE_DAYS = 14` (now genuinely a half-life). The floor is
+derived, not taste: with badge bands at 40 and 55, a floor of at least 40/55 = 0.727 guarantees that a
+job the badge calls a strong match is never outranked by one it calls merely good, at any age.
+
+**Consequence.** Age can move a job by at most 1.333x — enough to separate comparable postings, not
+enough to bury a better one. `tests/ranking.test.ts` asserted the _opposite_ under the heading "this is
+the assertion that matters": that a fresh weak match should beat a stale strong one. That was the bug
+written down as intended behaviour, which is why nothing caught it. The assertion is now inverted and a
+guarantee test added.
+
+---
+
+## 2026-08-09 — The MOS crosswalk feeds the embedded profile text
+
+**Context.** `crosswalk.ts` has held the right answer since Phase 1 — 88M expands to "Truck Driver, CDL
+Driver, Delivery Driver, Fleet Supervisor, Dispatcher" — but its only consumer was `buildSearchTerms`,
+which runs on the keyed-search path. Constraint 6 makes "no API keys" the default install, so for most
+users the table did nothing. The embedded profile instead carried the literal string
+`"Military experience: Army 88M, 92Y"`, and `88M` is a token the sentence model has no meaning for.
+
+**Decision.** `buildProfileText` expands MOC codes to civilian titles and drops the codes themselves.
+Codes the crosswalk cannot translate are still written out, but last, where truncation reaches them first.
+
+**Consequence.** Measured A/B over the same 5,293 job vectors, re-embedding only the profile: median rank
+of hireable jobs **785 → 167**, and a literal "Class A Driver" posting moved from fit-rank 19 to **rank 1**.
+The crosswalk is still a 17-entry hand-built stub covering common enlisted families;
+`scripts/build-crosswalk.ts` referenced in its TODO **does not exist**. Generating the full O*NET Military
+Crosswalk (CC BY 4.0, attribution required when shipped) remains open.
+
+---
+
+## 2026-08-09 — The harness loads `.env`
+
+**Context.** `USAJOBS_API_KEY` and `USAJOBS_USER_AGENT` were present in `.env` and silently ignored: the
+harness script was plain `node scripts/harness.ts`, which reads `process.env` only. Every "federal jobs
+are turned off" run was a false negative.
+
+**Decision.** `node --env-file-if-exists=.env scripts/harness.ts`. The `-if-exists` form so a contributor
+without a `.env` is unaffected.
+
+**Consequence.** Federal search now actually runs. Note what it returns: with the key live, the veterans
+hiring-path search for this profile yields **13 postings nationwide**, none near Fayetteville. That is not
+a bug — `usajobs.ts:182` already records that `"truck driver"` returns 14 postings nationally and 0 within
+50 miles of Fayetteville, which is why `LocationName` is deliberately not sent.
+
+---
+
+## 2026-08-09 — Honest record: source coverage does not serve the target audience
+
+**Context.** The measurements above kept pointing past the ranker. For a CDL truck driver near Fort Bragg,
+the corpus contains **4 driver/CDL jobs out of 5,514**, 2 dispatch/fleet, and 2,699 engineering roles.
+5,501 of 5,514 jobs come from 33 defense/aerospace/tech Greenhouse boards.
+
+**Decision.** Record it rather than let ranking work imply it is solved.
+
+**Consequence.** Greenhouse, Lever and Ashby are the ATSs of venture-backed technology employers. They are
+reachable precisely because they publish JSON, and they hire almost none of this app's audience. The
+employers who hire enlisted veterans — carriers, warehouses, hospitals, municipalities, manufacturers —
+are on Workday, iCIMS, Taleo and Indeed, which constraint 1 forbids scraping. **Adzuna (SPEC §6, an
+aggregator with a free tier and broad blue-collar coverage) is therefore the single highest-value
+remaining source**, and is worth more to this audience than any further ranking work.
+
+Until then the app must be honest rather than empty: the design system's "Where these jobs come from"
+disclosure already names the unreachable employers and tells the person to go to those career pages
+directly. That copy is not a consolation prize — for this audience it is currently the most useful thing
+on the screen.

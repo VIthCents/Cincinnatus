@@ -1,4 +1,5 @@
 import { JOB_TEXT_MAX_CHARS, PROFILE_TEXT_MAX_CHARS } from "../config.ts";
+import { civilianTitlesFor } from "../profile/crosswalk.ts";
 import type { Job, Profile } from "../types.ts";
 
 /**
@@ -20,6 +21,21 @@ import type { Job, Profile } from "../types.ts";
  *     that would then be embedded as if it were content.
  */
 
+/** Case-insensitive, order-preserving. A title the user typed wins the slot. */
+function dedupe(values: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const value of values) {
+    const trimmed = value.trim();
+    if (trimmed === "") continue;
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(trimmed);
+  }
+  return out;
+}
+
 function truncate(text: string, maxChars: number): string {
   if (text.length <= maxChars) return text;
   const cut = text.slice(0, maxChars);
@@ -31,15 +47,34 @@ function truncate(text: string, maxChars: number): string {
 export function buildProfileText(profile: Profile): string {
   const parts: string[] = [];
 
-  if (profile.titles.length > 0) {
-    parts.push(profile.titles.join(", "));
+  // The user's own titles first, then the civilian titles their military codes
+  // translate to. The codes THEMSELVES are not embedded: "88M" is a token the
+  // model has no meaning for, and it displaces words that do.
+  //
+  // Measured 2026-08-09 on a 5,293-job corpus, for an 88M/92Y profile: adding
+  // the crosswalk titles moved the median rank of hireable jobs from 785 to
+  // 167, and lifted a literal "Class A Driver" posting from rank 19 to rank 1.
+  // This is not new data — crosswalk.ts already held the right answer; it was
+  // only ever wired into the keyed-search path, so a user with no API keys got
+  // nothing from it (constraint 6 makes that the default install).
+  const civilianTitles = profile.mocCodes.flatMap((code) => civilianTitlesFor(code));
+  const titles = dedupe([...profile.titles, ...civilianTitles]);
+
+  if (titles.length > 0) {
+    parts.push(titles.join(", "));
   }
   if (profile.skills.length > 0) {
     parts.push(`Skills: ${profile.skills.join(", ")}`);
   }
-  if (profile.mocCodes.length > 0) {
+  // Codes the crosswalk could not translate are still worth saying — a
+  // recruiter's posting may name them — but they go last, where truncation
+  // reaches them first.
+  const untranslated = profile.mocCodes.filter(
+    (code) => civilianTitlesFor(code).length === 0,
+  );
+  if (untranslated.length > 0) {
     const branch = profile.branch === null ? "" : `${profile.branch} `;
-    parts.push(`Military experience: ${branch}${profile.mocCodes.join(", ")}`);
+    parts.push(`Military experience: ${branch}${untranslated.join(", ")}`);
   }
   if (profile.education.length > 0) {
     parts.push(`Education: ${profile.education.join(", ")}`);

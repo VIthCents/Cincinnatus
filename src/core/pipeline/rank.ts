@@ -1,4 +1,4 @@
-import { MIN_RESULTS_BEFORE_WIDENING } from "../config.ts";
+import { MIN_FIT_FOR_WIDENING, MIN_RESULTS_BEFORE_WIDENING } from "../config.ts";
 import { dot } from "../embed/vector.ts";
 import type { FitDistribution, Job, Profile, RankedJob } from "../types.ts";
 import {
@@ -112,7 +112,17 @@ export function rankJobs(input: RankInput): RankOutput {
   // the country can legitimately have almost nothing commutable. An empty list
   // reads as a broken app; a long list of unreachable jobs reads as a useless
   // one. Widening and saying so plainly is the honest middle.
-  const widened = nearby.length < MIN_RESULTS_BEFORE_WIDENING;
+  //
+  // Widening triggers on how many jobs nearby are worth applying to, NOT on how
+  // many are nearby. Measured 2026-08-09: a CDL driver in Fayetteville NC had
+  // 318 jobs "within reach" — comfortably over the old threshold of 10, so the
+  // search never widened — of which ZERO were work a driver could be hired
+  // into. They were remote-flagged white-collar tech postings that happen to
+  // list no city. Meanwhile the corpus held a literal "Class A Driver" job that
+  // the person was never shown. Counting jobs measured the wrong thing: a
+  // plentiful local list and a useless one are indistinguishable by length.
+  const nearbyWorthwhile = nearby.filter((r) => r.fitScore >= MIN_FIT_FOR_WIDENING);
+  const widened = nearbyWorthwhile.length < MIN_RESULTS_BEFORE_WIDENING;
   const ranked = widened ? [...scored].sort(byScore) : nearby;
 
   const fits = ranked.map((r) => r.fitScore);

@@ -1,9 +1,18 @@
-import { FRESHNESS_HALF_LIFE_DAYS, MAX_AGE_DAYS, MIN_AGE_DAYS } from "../config.ts";
+import {
+  FRESHNESS_FLOOR,
+  FRESHNESS_HALF_LIFE_DAYS,
+  MAX_AGE_DAYS,
+  MIN_AGE_DAYS,
+} from "../config.ts";
 
 /**
- * The scoring maths. One list, one number (SPEC section 5):
+ * The scoring maths. One list, one number.
  *
- *     final_score = fit_score * exp(-age_days / FRESHNESS_HALF_LIFE_DAYS)
+ *     final_score = fit_score * freshnessFactor(age_days)
+ *     freshnessFactor(a) = FLOOR + (1 - FLOOR) * 2 ** (-a / HALF_LIFE)
+ *
+ * SPEC section 5 writes this as `fit_score * exp(-age_days / 7)`. That is a
+ * deliberate, measured deviation — see docs/DECISIONS.md, 2026-08-09.
  */
 
 const MS_PER_DAY = 86_400_000;
@@ -23,8 +32,20 @@ export function ageInDays(now: number, postedAt: number): number {
   return Math.min(Math.max(raw, MIN_AGE_DAYS), MAX_AGE_DAYS);
 }
 
+/**
+ * How much of a job's fit survives its age. Bounded: never below
+ * {@link FRESHNESS_FLOOR}.
+ *
+ * A bound is the whole point. Unbounded decay spans eleven orders of magnitude
+ * across the 180-day clamp while fit spans about two-fold, so multiplying them
+ * did not blend two signals — it sorted by date and used fit as a tiebreak.
+ * Floored, age can move a job by at most 1.333x, which is enough to separate
+ * comparable postings and not enough to bury a better one.
+ */
 export function freshnessFactor(ageDays: number): number {
-  return Math.exp(-ageDays / FRESHNESS_HALF_LIFE_DAYS);
+  return (
+    FRESHNESS_FLOOR + (1 - FRESHNESS_FLOOR) * 2 ** (-ageDays / FRESHNESS_HALF_LIFE_DAYS)
+  );
 }
 
 /**

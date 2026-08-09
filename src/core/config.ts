@@ -3,13 +3,29 @@
  */
 
 /**
- * Freshness half-life, in days, for `final_score = fit * exp(-age_days / N)`.
+ * Freshness half-life, in days, for the decaying part of the freshness factor.
  *
- * At 7: a job posted today keeps 100% of its fit, one posted a week ago keeps
- * 37%, two weeks 14%. That is aggressive on purpose — a veteran applying to a
- * three-week-old posting is usually behind a queue of hundreds.
+ * This is a true half-life now: `2 ** (-age / N)`. The old code wrote
+ * `exp(-age / 7)` under this name, which is a time CONSTANT of 7 days — an
+ * actual half-life of 4.85 days, and a name that disagreed with its own maths.
  */
-export const FRESHNESS_HALF_LIFE_DAYS = 7;
+export const FRESHNESS_HALF_LIFE_DAYS = 14;
+
+/**
+ * The least a job's fit can be discounted for age, however old it is.
+ *
+ * Derived, not taste. The badge bands are 40 (good) and 55 (strong), so for the
+ * guarantee "a job the badge calls strong is never outranked by a job the badge
+ * calls good, at any age" the floor must be at least 40/55 = 0.727. 0.75 is that
+ * rounded up, and it caps age's total authority at 1.333x.
+ *
+ * Measured 2026-08-09, this is why: the corpus has a median age of 54 days and
+ * 90% of it is over a week old, so the unbounded `exp(-age/7)` was not a
+ * tiebreak, it was a hard filter down to the newest ~10% — Spearman correlation
+ * of final score with age was 0.99, with fit 0.15. The single best semantic
+ * match in a 5,293-job corpus sat at final-rank 1,921 for no reason but its date.
+ */
+export const FRESHNESS_FLOOR = 0.75;
 
 /**
  * Age is clamped into this range before the decay is applied.
@@ -49,6 +65,17 @@ export const EMBED_BATCH_SIZE = 32;
  * Widening and saying so is the honest middle.
  */
 export const MIN_RESULTS_BEFORE_WIDENING = 10;
+
+/**
+ * The fit a nearby job needs before it counts toward "there is enough here".
+ *
+ * Widening asks how many jobs nearby are worth applying to, not how many are
+ * nearby — see rank.ts. Set at the "good match" badge band, so the question the
+ * code asks is the same one the interface answers: are there ten jobs near this
+ * person that Cincinnatus would call a good match? Measured 2026-08-09, a CDL
+ * driver in Fayetteville NC had 318 nearby jobs and none of them was one.
+ */
+export const MIN_FIT_FOR_WIDENING = 40;
 
 /** Default number of days of USAJobs postings to request. */
 export const USAJOBS_DEFAULT_WINDOW_DAYS = 7;

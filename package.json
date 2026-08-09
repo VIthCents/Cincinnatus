@@ -17,7 +17,7 @@
     "typecheck": "tsc -p tsconfig.core.json && tsc -p tsconfig.ui.json && tsc -p tsconfig.node.json",
     "test": "vitest run",
     "test:watch": "vitest",
-    "harness": "node scripts/harness.ts"
+    "harness": "node --env-file-if-exists=.env scripts/harness.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.116.0",

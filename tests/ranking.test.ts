@@ -7,7 +7,7 @@ import {
 } from "../src/core/pipeline/score.ts";
 import { assignCanonicals } from "../src/core/pipeline/dedupe.ts";
 import { isWithinReach, rankJobs } from "../src/core/pipeline/rank.ts";
-import { MAX_AGE_DAYS } from "../src/core/config.ts";
+import { FRESHNESS_FLOOR, MAX_AGE_DAYS } from "../src/core/config.ts";
 import type { Job, Profile } from "../src/core/types.ts";
 
 const DAY = 86_400_000;
@@ -84,18 +84,41 @@ describe("fit score", () => {
 });
 
 describe("the blend", () => {
-  it("lets a fresher, weaker match beat a stale, stronger one", () => {
-    // This is the assertion that matters. Pinning exp(-7/7) to 0.3678 tests
-    // Math.exp; this tests the product actually reorders the list.
-    const freshWeak = blend(60, freshnessFactor(0));
-    const staleStrong = blend(90, freshnessFactor(21));
-    expect(freshWeak).toBeGreaterThan(staleStrong);
+  /**
+   * This file used to assert the opposite — that a fresh weak match SHOULD beat
+   * a stale strong one — under the heading "this is the assertion that matters".
+   * It was the bug, written down as intended behaviour, which is why nothing
+   * caught it. Measured 2026-08-09: with the old unbounded decay, the single
+   * best semantic match in a 5,293-job corpus sat at final-rank 1,921, and the
+   * final score correlated 0.99 with age and 0.15 with fit.
+   */
+  it("does not let a fresher, weaker match bury a much stronger one", () => {
+    expect(blend(90, freshnessFactor(21))).toBeGreaterThan(
+      blend(60, freshnessFactor(0)),
+    );
+  });
+
+  it("still lets freshness separate two comparable jobs", () => {
+    expect(blend(60, freshnessFactor(0))).toBeGreaterThan(
+      blend(58, freshnessFactor(30)),
+    );
   });
 
   it("still prefers the stronger match when both are equally fresh", () => {
     expect(blend(90, freshnessFactor(3))).toBeGreaterThan(
       blend(60, freshnessFactor(3)),
     );
+  });
+
+  /**
+   * The guarantee the floor exists to provide: age's total authority is capped
+   * at 1/FRESHNESS_FLOOR, so a job the badge calls a strong match can never be
+   * outranked by one the badge calls merely good, however old it is.
+   */
+  it("never lets age overturn a badge-level difference in fit", () => {
+    const oldest = freshnessFactor(MAX_AGE_DAYS);
+    expect(blend(55, oldest)).toBeGreaterThan(blend(40, freshnessFactor(0)));
+    expect(oldest).toBeGreaterThanOrEqual(FRESHNESS_FLOOR);
   });
 });
 
@@ -167,19 +190,53 @@ describe("rankJobs", () => {
   vectors.set("near-weak", new Float32Array([0.2, 0.98]));
   vectors.set("far-strong", new Float32Array([1, 0]));
 
-  it("filters to reachable jobs when there are enough of them", () => {
-    const jobs = Array.from({ length: 15 }, (_, i) =>
-      job({ id: `near-${i}`, location: "Austin, TX", dedupeKey: `k${i}` }),
+  /** Every listed id matches the profile exactly, so its fit is 100. */
+  const strongVectors = (ids: readonly string[]) =>
+    new Map(ids.map((id) => [id, new Float32Array([1, 0])]));
+
+  it("filters to reachable jobs when enough of them are good matches", () => {
+    const ids = Array.from({ length: 15 }, (_, i) => `near-${i}`);
+    const jobs = ids.map((id, i) =>
+      job({ id, location: "Austin, TX", dedupeKey: `k${i}` }),
     );
     const result = rankJobs({
       jobs,
-      vectors: new Map(),
+      vectors: strongVectors(ids),
       profileVector,
       profile,
       now: NOW,
     });
     expect(result.widenedBeyondRadius).toBe(false);
     expect(result.ranked).toHaveLength(15);
+  });
+
+  /**
+   * The bug this replaced: widening used to trigger on how many jobs were
+   * nearby, so a long list of nearby jobs that fit nobody read as "plenty here"
+   * and the search never widened. Measured 2026-08-09, a CDL driver in
+   * Fayetteville NC had 318 nearby jobs, none of them work a driver could do,
+   * while the corpus held a "Class A Driver" posting they were never shown.
+   */
+  it("widens when there are plenty of jobs nearby but none worth applying to", () => {
+    const jobs = [
+      ...Array.from({ length: 40 }, (_, i) =>
+        job({ id: `near-poor-${i}`, location: "Austin, TX", dedupeKey: `np${i}` }),
+      ),
+      job({ id: "far-strong", location: "Boston, MA", dedupeKey: "fs" }),
+    ];
+    // Only the distant job matches; the 40 nearby ones score near zero.
+    const vecs = new Map<string, Float32Array>([
+      ["far-strong", new Float32Array([1, 0])],
+      ...jobs
+        .filter((j) => j.id.startsWith("near-poor"))
+        .map((j) => [j.id, new Float32Array([0.05, 0.999])] as const),
+    ]);
+
+    const result = rankJobs({ jobs, vectors: vecs, profileVector, profile, now: NOW });
+
+    expect(result.reachable).toBe(40);
+    expect(result.widenedBeyondRadius).toBe(true);
+    expect(result.ranked[0]?.job.id).toBe("far-strong");
   });
 
   it("widens beyond the radius rather than showing an almost-empty list", () => {
@@ -271,9 +328,10 @@ describe("rankJobs", () => {
     // When the filter applies, `ranked` already contains only reachable jobs,
     // so reporting reachable/ranked always prints "N of N" and tells the user
     // nothing. The honest denominator is everything considered.
+    const nearIds = Array.from({ length: 12 }, (_, i) => `near${i}`);
     const jobs = [
-      ...Array.from({ length: 12 }, (_, i) =>
-        job({ id: `near${i}`, location: "Austin, TX", dedupeKey: `n${i}` }),
+      ...nearIds.map((id, i) =>
+        job({ id, location: "Austin, TX", dedupeKey: `n${i}` }),
       ),
       ...Array.from({ length: 40 }, (_, i) =>
         job({ id: `far${i}`, location: "Boston, MA", dedupeKey: `f${i}` }),
@@ -281,7 +339,7 @@ describe("rankJobs", () => {
     ];
     const result = rankJobs({
       jobs,
-      vectors: new Map(),
+      vectors: strongVectors(nearIds),
       profileVector,
       profile,
       now: NOW,
