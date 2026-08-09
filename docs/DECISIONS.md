@@ -510,3 +510,91 @@ Phase 1 as "subtly wrong for a year" territory.
 
 **Consequence.** One tiny dependency, scoped to one adapter file, replaceable behind the port whenever
 WebCrypto grows a sync digest or the port goes async for other reasons.
+
+---
+
+## 2026-08-09 — Search progress is three named phases, not a spinner
+
+**Context.** The product default is to embed everything, so a first search runs 10–20 minutes of
+single-threaded WASM. A spinner and a changing sentence cannot distinguish "working" from "hung", and the
+old `searchStatus: string` could only ever be one line at a time.
+
+**Decision.** `ProgressEvent` gains `{ kind: "phase", phase: "finding" | "reading" | "ranking" }` and the
+pipeline announces its own stage rather than letting the UI infer one. `core/app/progress.ts` accumulates
+events into a `SearchProgress` — phase, jobs read of jobs to read, one entry per job site with its state,
+and a plain-words estimate. `RunProgress` renders it.
+
+The estimate is measured from this run's own rate and is withheld until 24 jobs have gone through; a
+resumed run is timed from the count it resumed at, not from zero. The reading phase is skipped entirely
+when nothing needs embedding, rather than showing "0 of 0".
+
+**Consequence.** The first-run advisory ("10 to 20 minutes, because Cincinnatus reads each job on your own
+computer") is shown from `hasSearched`, which is false until a run is on record — so it stops being shown
+the moment it stops being true.
+
+---
+
+## 2026-08-09 — Vendor the design system's CSS rather than re-express it as utilities
+
+**Context.** The Cincinnatus Design System ships tokens, a closed Tailwind 4 theme, and a reference CSS
+implementation of every component. Hand-translating those rules into Tailwind utilities would have meant
+re-deriving hundreds of measured values.
+
+**Decision.** `src/ui/tokens/` carries the design system's CSS (tokens, controls, feedback, chat,
+opportunities, wizard, and the kit's screen layout), unchanged in content but run through Prettier like
+everything else in the repo — so re-vendoring is "re-fetch, then `pnpm format`", and the diff is real
+changes only. Components are ported to TSX with the design
+system's markup and class names. Two files are ours and say so: `app.css` (the shell, the modal, the
+document "paper", the wizard's drop target) and the `.cn-*` additions inside it — layout only, every value
+read from the same tokens.
+
+The Tailwind theme is **closed**: `bg-blue-700` and `text-2xl` now generate no CSS at all. That is the
+enforcement mechanism — drift shows up as unstyled markup rather than as an off-brand shade.
+
+**Consequence.** Byte-fidelity to the spec, and `.dark` works through the same tokens. The cost is that
+the app carries CSS it did not author; when the design system changes, these files are re-vendored rather
+than edited.
+
+---
+
+## 2026-08-09 — The match badge takes the design system's words, not its thresholds
+
+**Context.** `guidelines/matching.md` specifies `fair | good | strong` on `fitScore` at 35/55/75, with
+jobs under 35 dropped before the UI sees them. Our `fitScore` is `clamp(cosine, 0, 1) × 100`, and raw
+MiniLM cosines between a short profile and a long posting cluster around 0.1–0.5 (`core/pipeline/score.ts`
+says so in its own comment).
+
+**Decision.** Adopt the vocabulary, the chevrons, the "badge reads fitScore, never finalScore" ruling, and
+"a person never sees the number". Keep the calibrated bands (55 / 40 / floor). Do **not** add the 35
+ranking floor to core.
+
+**Consequence.** On the current scoring function, a 75 floor for "strong" would essentially never fire and
+a 35 floor would hide most of the list — the app would present as broken rather than as honest. This is a
+divergence to revisit, not a rejection: the numbers are right for a score with a wider spread, and a live
+run's fit distribution (already reported per run) is the evidence needed to either recalibrate
+`fitFromSimilarity` or move the bands. **TODO(matching): revisit in Phase 4 with a real distribution.**
+
+---
+
+## 2026-08-09 — Window grows to 1180×800, minimum 1024×700
+
+**Context.** `guidelines/handoff.md` rules that the app moves to a 1024×700 minimum and a 1180×800
+default. The wizard's two-column grid and the review screen's side-by-side documents both need it.
+
+**Decision.** Applied to `tauri.conf.json`.
+
+**Consequence.** The app no longer fits a 640×520 window. Text still resizes to 200% without breakage
+(no viewport units, measures in `ch`, the wizard columns stack) per `guidelines/accessibility.md`.
+
+---
+
+## 2026-08-09 — A dark-mode preference, because the palette was otherwise unreachable
+
+**Context.** The vendored `colors.css` carries a full dark palette behind a `.dark` class on the root
+element and no `prefers-color-scheme` of its own. Nothing in the app put that class anywhere.
+
+**Decision.** `ui/app/theme.ts` applies it from a three-way preference (match the computer / light / dark)
+stored in `settings`. "Match my computer" keeps following `prefers-color-scheme` while it is selected.
+
+**Consequence.** Printing needed a guard: the print host forces a light three-step ink ramp, or printing
+while the app is in dark mode would put pale grey text on a white page.

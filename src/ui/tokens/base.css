@@ -1,0 +1,60 @@
+/* Minimal reset + the two things every screen inherits: type and focus. */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+html {
+  -webkit-text-size-adjust: 100%;
+}
+body {
+  margin: 0;
+  background: var(--surface-app);
+  color: var(--text-body);
+  font-family: var(--font-ui);
+  font-size: var(--body-size);
+  line-height: var(--body-line);
+  font-weight: var(--body-weight);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+h1,
+h2,
+h3,
+h4 {
+  margin: 0;
+  color: var(--text-strong);
+  text-wrap: balance;
+}
+p {
+  margin: 0;
+  text-wrap: pretty;
+}
+a {
+  color: var(--text-link);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+}
+a:hover {
+  color: var(--text-link-hover);
+  text-decoration-thickness: 2px;
+}
+a:active {
+  color: var(--text-link-hover);
+}
+/* The focus ring: a 2px gap in the surface colour, then a 3px brass ring.
+   The gap guarantees the ring reads on any background, light or dark. */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: var(--focus-gap-width);
+  border-radius: var(--radius-control);
+}
+::selection {
+  background: var(--steel-100);
+  color: var(--ink-900);
+}
+.dark ::selection {
+  background: var(--steel-800);
+  color: #efe9dc;
+}

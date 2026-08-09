@@ -8,9 +8,9 @@ export function LetterView({
   resume: ResumeData;
 }) {
   return (
-    <article className="space-y-4 text-base leading-relaxed">
+    <article className="paper">
       <header>
-        <h3 className="text-2xl font-bold">{resume.name}</h3>
+        <h3 className="paper__name">{resume.name}</h3>
       </header>
       <p>{letter.salutation}</p>
       {letter.bodyParagraphs.map((paragraph, i) => (

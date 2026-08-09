@@ -1,0 +1,202 @@
+/* Chat bubbles, typing indicator, suggestion chips, inline document card.
+   Vendored from the Cincinnatus Design System (css/chat.css);
+   reformatted by Prettier, so re-vendor by re-fetching and running `pnpm format`. */
+.cn-chat {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+.cn-bubble {
+  max-width: var(--measure-tight);
+  padding: var(--space-4) var(--space-5);
+  border-radius: var(--radius-bubble);
+  font-size: var(--body-lg-size);
+  line-height: var(--body-lg-line);
+  white-space: pre-wrap;
+}
+.cn-bubble p + p {
+  margin-top: var(--space-4);
+}
+.cn-bubble--agent {
+  align-self: flex-start;
+  background: var(--surface-card);
+  border: var(--border-width) solid var(--border-hairline);
+  color: var(--text-body);
+  border-bottom-left-radius: var(--radius-control);
+}
+.cn-bubble--user {
+  align-self: flex-end;
+  background: var(--primary-subtle);
+  border: var(--border-width) solid var(--primary-subtle-border);
+  color: var(--text-strong);
+  border-bottom-right-radius: var(--radius-control);
+}
+.cn-bubble__who {
+  display: block;
+  margin-bottom: var(--space-2);
+  font-size: var(--meta-size);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--meta-track);
+  color: var(--text-muted);
+}
+.cn-typing {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  align-self: flex-start;
+  padding: var(--space-4) var(--space-5);
+  border: var(--border-width) solid var(--border-hairline);
+  border-radius: var(--radius-bubble);
+  border-bottom-left-radius: var(--radius-control);
+  background: var(--surface-card);
+  color: var(--text-muted);
+  font-size: var(--body-sm-size);
+}
+.cn-typing__dots {
+  display: inline-flex;
+  gap: 5px;
+}
+.cn-typing__dots i {
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-round);
+  background: var(--text-muted);
+  animation: cn-pulse 1200ms var(--ease-in-out) infinite;
+}
+.cn-typing__dots i:nth-child(2) {
+  animation-delay: 160ms;
+}
+.cn-typing__dots i:nth-child(3) {
+  animation-delay: 320ms;
+}
+@keyframes cn-pulse {
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cn-typing__dots i {
+    animation: none;
+    opacity: 0.6;
+  }
+}
+.cn-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+.cn-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--hit-min);
+  padding: 0 var(--space-5);
+  border: var(--border-width) solid var(--border-strong);
+  border-radius: var(--radius-control);
+  background: var(--surface-card);
+  color: var(--text-body);
+  font-family: var(--font-ui);
+  font-size: var(--body-sm-size);
+  font-weight: var(--weight-medium);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out);
+}
+.cn-chip:hover {
+  background: var(--surface-hover);
+  border-color: var(--text-strong);
+}
+.cn-chip:active {
+  background: var(--surface-sunken);
+}
+.cn-chip:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: var(--focus-gap-width);
+}
+/* Inline document card — the thing the agent made, sitting in the transcript */
+.cn-doc {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  max-width: var(--measure);
+  padding: var(--space-5);
+  border: var(--border-width) solid var(--border-hairline);
+  border-left: 4px solid var(--accent);
+  border-radius: var(--radius-card);
+  background: var(--surface-card);
+  box-shadow: var(--shadow-1);
+}
+.cn-doc__icon {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-control);
+  background: var(--accent-subtle);
+  color: var(--accent-text);
+}
+.cn-doc__text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.cn-doc__name {
+  font-size: var(--body-size);
+  font-weight: var(--weight-semibold);
+  color: var(--text-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cn-doc__meta {
+  font-size: var(--body-sm-size);
+  color: var(--text-muted);
+}
+.cn-doc__actions {
+  flex: none;
+  display: flex;
+  gap: var(--space-2);
+}
+/* Composer */
+.cn-composer {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border: var(--border-width) solid var(--border-strong);
+  border-radius: var(--radius-card);
+  background: var(--surface-card);
+}
+.cn-composer:focus-within {
+  border-color: var(--text-strong);
+  box-shadow:
+    0 0 0 var(--focus-gap-width) var(--focus-gap),
+    0 0 0 5px var(--focus-ring);
+}
+.cn-composer__input {
+  flex: 1;
+  min-height: 32px;
+  max-height: 160px;
+  border: 0;
+  background: none;
+  color: var(--text-body);
+  font-family: var(--font-ui);
+  font-size: var(--body-lg-size);
+  line-height: 1.5;
+  resize: none;
+}
+.cn-composer__input:focus {
+  outline: none;
+}
+.cn-composer__input::placeholder {
+  color: var(--text-muted);
+}

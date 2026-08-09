@@ -1,5 +1,5 @@
 import type { Finding } from "../../core/documents/types.ts";
-import { Notice } from "../components/ui.tsx";
+import { Banner } from "../components/ui.tsx";
 
 /**
  * The no-fabrication check's findings, as simple confirmations (SPEC §8:
@@ -19,41 +19,48 @@ export function FindingsList({
 
   if (findings.length === 0) {
     return (
-      <Notice>Checked against your resume: nothing was added that is not yours.</Notice>
+      <Banner tone="success" title="Checked against your resume.">
+        Nothing was added that is not yours.
+      </Banner>
     );
   }
 
   return (
-    <div className="space-y-3">
+    <div className="stack stack--tight">
       {high.length > 0 && (
-        <Notice tone="warn">
-          <p className="font-semibold">
-            {context === "derived"
-              ? "Stop — these things are not backed by your resume:"
-              : "Please check these changes:"}
-          </p>
-          <ul className="ml-5 mt-1 list-disc">
+        <Banner
+          // A derived document that claims something the resume does not
+          // support is the failure this whole check exists to catch, so it is
+          // an error and it interrupts. An authored change is the person's own
+          // instruction coming back to them: worth confirming, not alarming.
+          tone={context === "derived" ? "error" : "caution"}
+          title={
+            context === "derived"
+              ? "Stop — these things are not backed by your resume."
+              : "Please check these changes."
+          }
+        >
+          <ul className="findings">
             {high.map((f, i) => (
               <li key={i}>{f.message}</li>
             ))}
           </ul>
           {context === "derived" && (
-            <p className="mt-2">
+            <p>
               Do not send this out until they are fixed. Fix your resume first, or make
               the document again.
             </p>
           )}
-        </Notice>
+        </Banner>
       )}
       {review.length > 0 && (
-        <Notice>
-          <p className="font-semibold">Worth a quick look:</p>
-          <ul className="ml-5 mt-1 list-disc">
+        <Banner tone="info" title="Worth a quick look.">
+          <ul className="findings">
             {review.map((f, i) => (
               <li key={i}>{f.message}</li>
             ))}
           </ul>
-        </Notice>
+        </Banner>
       )}
     </div>
   );

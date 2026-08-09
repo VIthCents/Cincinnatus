@@ -347,6 +347,9 @@ async function commandSearch(values: SearchFlags): Promise<number> {
 
   const reporter: Reporter = (event: ProgressEvent) => {
     switch (event.kind) {
+      case "phase":
+        out(`\n[${event.phase}]`);
+        break;
       case "source_start":
         process.stdout.write(`  ${event.label} ... `);
         break;

@@ -25,13 +25,22 @@ import {
 import { useAppDispatch, useAppState } from "../app/state.tsx";
 import { sourceTroubleWords } from "../app/searchRunner.ts";
 import { adoptBaseResume } from "../documents/actions.ts";
+import { RunProgress } from "../components/RunProgress.tsx";
+import { Mark } from "../components/Mark.tsx";
 import {
+  Banner,
   Busy,
   Notice,
   PrimaryButton,
   QuietButton,
   TextField,
+  Toggle,
 } from "../components/ui.tsx";
+import {
+  INITIAL_PROGRESS,
+  SearchProgressTracker,
+  type SearchProgress,
+} from "../../core/app/progress.ts";
 
 /**
  * First-run wizard (SPEC §8): conversational, one thing per screen, every step
@@ -87,14 +96,19 @@ export function Wizard() {
     stepRef.current?.focus();
   }, [step]);
 
+  const stepNumber = STEP_ORDER.indexOf(step) + 1;
+
   return (
-    <main className="mx-auto flex min-h-screen max-w-2xl flex-col justify-center p-8">
-      <div
-        key={step}
-        ref={stepRef}
-        tabIndex={-1}
-        className="flex flex-col gap-6 outline-none"
-      >
+    <main className="cn-wizard">
+      <header className="cn-wizard__bar">
+        <span className="app__mark">
+          <Mark />
+          <span>CINCINNATUS</span>
+        </span>
+        <StepProgress step={stepNumber} total={STEP_ORDER.length} />
+      </header>
+
+      <div key={step} ref={stepRef} tabIndex={-1} className="cn-wizard__body stack">
         {step === "welcome" && <WelcomeStep onNext={() => setStep("resume")} />}
         {step === "resume" && (
           <ResumeStep
@@ -151,6 +165,47 @@ export function Wizard() {
   );
 }
 
+const STEP_ORDER: readonly Step[] = [
+  "welcome",
+  "resume",
+  "ai_key",
+  "usajobs",
+  "preferences",
+  "search",
+];
+
+/** Ported from the design system (components/wizard/StepProgress.jsx). */
+function StepProgress({ step, total }: { step: number; total: number }) {
+  return (
+    <div className="cn-steps">
+      <span className="cn-steps__label">
+        Step {step} of {total}
+      </span>
+      <span
+        className="cn-steps__track"
+        role="progressbar"
+        aria-valuenow={step}
+        aria-valuemin={1}
+        aria-valuemax={total}
+        aria-label={`Step ${step} of ${total}`}
+      >
+        {Array.from({ length: total }, (_, i) => (
+          <span
+            key={i}
+            className={[
+              "cn-steps__seg",
+              i + 1 < step && "is-done",
+              i + 1 === step && "is-current",
+            ]
+              .filter(Boolean)
+              .join(" ")}
+          />
+        ))}
+      </span>
+    </div>
+  );
+}
+
 async function finish(dispatch: ReturnType<typeof useAppDispatch>): Promise<void> {
   await repo.setSetting(db, "wizard_done", "1");
   const profile = await repo.getStoredProfile(db);
@@ -163,9 +218,9 @@ async function finish(dispatch: ReturnType<typeof useAppDispatch>): Promise<void
 function WelcomeStep({ onNext }: { onNext: () => void }) {
   return (
     <>
-      <h1 className="text-4xl font-bold">Welcome. I'm Cincinnatus.</h1>
-      <p className="text-xl">I help veterans find work. All of it free.</p>
-      <p className="text-lg text-slate-700">
+      <h1 className="cn-wizard__title">Welcome. I'm Cincinnatus.</h1>
+      <p className="cn-wizard__lede">I help veterans find work. All of it free.</p>
+      <p className="cn-wizard__lede">
         Everything you tell me stays on this computer. No account. No sign-up. I only go
         online to look for jobs.
       </p>
@@ -193,8 +248,8 @@ function ResumeStep({
   if (alreadyHave && !replacing) {
     return (
       <>
-        <h1 className="text-3xl font-bold">I have your resume</h1>
-        <p className="text-lg text-slate-700">
+        <h1 className="cn-wizard__title">I have your resume</h1>
+        <p className="cn-wizard__lede">
           ✓ Your resume is already saved on this computer.
         </p>
         <PrimaryButton onClick={onSkip} autoFocus>
@@ -223,13 +278,13 @@ function ResumeStep({
 
   return (
     <>
-      <h1 className="text-3xl font-bold">Do you have a resume?</h1>
-      <p className="text-lg text-slate-700">
+      <h1 className="cn-wizard__title">Do you have a resume?</h1>
+      <p className="cn-wizard__lede">
         Any shape is fine — PDF, Word, or plain text. It never leaves this computer
         unless you connect the AI helper later.
       </p>
       <div
-        className="rounded-xl border-2 border-dashed border-slate-400 p-10 text-center"
+        className="cn-drop"
         onDragOver={(e) => e.preventDefault()}
         onDrop={(e) => {
           e.preventDefault();
@@ -240,21 +295,25 @@ function ResumeStep({
           <Busy label="Reading your resume..." />
         ) : (
           <>
-            <p className="mb-4 text-lg">Drop your resume here, or</p>
-            <PrimaryButton onClick={() => inputRef.current?.click()}>
+            <p className="prose">Drop your resume here, or</p>
+            <PrimaryButton icon="upload_file" onClick={() => inputRef.current?.click()}>
               Choose the file
             </PrimaryButton>
             <input
               ref={inputRef}
               type="file"
               accept=".pdf,.docx,.txt,.md"
-              className="hidden"
+              hidden
               onChange={(e) => void handleFile(e.target.files?.[0])}
             />
           </>
         )}
       </div>
-      {error !== null && <Notice tone="warn">{error}</Notice>}
+      {error !== null && (
+        <Banner tone="caution" title="Cincinnatus could not read that file.">
+          {error}
+        </Banner>
+      )}
       <QuietButton onClick={onSkip}>I don't have one yet — skip this</QuietButton>
     </>
   );
@@ -288,8 +347,8 @@ function AiKeyStep({
   if (alreadyConnected) {
     return (
       <>
-        <h1 className="text-3xl font-bold">The AI helper is connected</h1>
-        <p className="text-lg text-slate-700">
+        <h1 className="cn-wizard__title">The AI helper is connected</h1>
+        <p className="cn-wizard__lede">
           ✓ Your AI access key is already saved. You can change it any time in Settings.
         </p>
         <PrimaryButton onClick={() => onDone(true)} autoFocus>
@@ -301,8 +360,8 @@ function AiKeyStep({
 
   return (
     <>
-      <h1 className="text-3xl font-bold">Connect the AI helper</h1>
-      <p className="text-lg text-slate-700">
+      <h1 className="cn-wizard__title">Connect the AI helper</h1>
+      <p className="cn-wizard__lede">
         The AI helper looks over your resume, fixes it with you, and writes documents
         for each job. It costs a little money — you pay Anthropic (the AI company)
         directly, only for what you use. About $5 lasts a long while.
@@ -313,7 +372,7 @@ function AiKeyStep({
         chat plan does <strong>not</strong> come with an access key, so please don't buy
         one for this.
       </Notice>
-      <ol className="ml-5 list-decimal space-y-1 text-lg text-slate-700">
+      <ol className="cn-guide">
         <li>
           Go to <strong>console.anthropic.com</strong> and make a free account.
         </li>
@@ -366,13 +425,13 @@ function UsaJobsStep({ onDone }: { onDone: () => void }) {
 
   return (
     <>
-      <h1 className="text-3xl font-bold">Want federal jobs too?</h1>
-      <p className="text-lg text-slate-700">
+      <h1 className="cn-wizard__title">Want federal jobs too?</h1>
+      <p className="cn-wizard__lede">
         Federal jobs give hiring preference to veterans. To include them, you need a
         free key from USAJobs — the government's job site. It takes a few minutes and
         costs nothing.
       </p>
-      <ol className="ml-5 list-decimal space-y-1 text-lg text-slate-700">
+      <ol className="cn-guide">
         <li>
           Go to <strong>developer.usajobs.gov/apirequest</strong>
         </li>
@@ -467,9 +526,9 @@ function PreferencesStep({
 
   return (
     <>
-      <h1 className="text-3xl font-bold">A few quick questions</h1>
+      <h1 className="cn-wizard__title">A few quick questions</h1>
       {resume !== null && (
-        <p className="text-lg text-slate-700">
+        <p className="cn-wizard__lede">
           ✓ I read your resume — I'll use it to find work like what you've done. You can
           change anything later in the chat.
         </p>
@@ -496,58 +555,54 @@ function PreferencesStep({
           onChange={(e) => setWork(e.target.value)}
         />
       )}
-      <div className="flex gap-3">
-        <div className="grow">
-          <TextField
-            label="What city are you near?"
-            value={city}
-            onChange={(e) => setCity(e.target.value)}
-          />
-        </div>
-        <div className="w-28">
-          <TextField
-            label="State"
-            hint="Like NC"
-            value={state}
-            maxLength={2}
-            onChange={(e) => setState(e.target.value)}
-          />
-        </div>
-      </div>
-      <label className="flex items-center gap-3 text-lg">
-        <input
-          type="checkbox"
-          checked={remoteOk}
-          onChange={(e) => setRemoteOk(e.target.checked)}
-          className="h-6 w-6"
+      <div className="cn-pair">
+        <TextField
+          label="What city are you near?"
+          value={city}
+          onChange={(e) => setCity(e.target.value)}
         />
-        Work-from-home jobs are fine too
-      </label>
-      <PrimaryButton onClick={() => onDone(buildProfile())} disabled={!canContinue}>
-        Find my first jobs
-      </PrimaryButton>
+        <TextField
+          label="State"
+          hint="Like NC"
+          value={state}
+          maxLength={2}
+          onChange={(e) => setState(e.target.value)}
+          className="cn-pair__narrow"
+        />
+      </div>
+      <Toggle
+        checked={remoteOk}
+        onChange={setRemoteOk}
+        label="Work-from-home jobs are fine too"
+      />
+      <div className="row">
+        <PrimaryButton
+          icon="search"
+          onClick={() => onDone(buildProfile())}
+          disabled={!canContinue}
+        >
+          Find my first jobs
+        </PrimaryButton>
+      </div>
     </>
   );
 }
 
 function FirstSearchStep({ onAllDone }: { onAllDone: () => void }) {
   const dispatch = useAppDispatch();
-  const [lines, setLines] = useState<string[]>([]);
+  const [progress, setProgress] = useState<SearchProgress>(INITIAL_PROGRESS);
   const [running, setRunning] = useState(false);
   const [failed, setFailed] = useState<string | null>(null);
   const startedRef = useRef(false);
+  const trackerRef = useRef(new SearchProgressTracker());
 
+  // Kept local as well as dispatched: this step renders its own progress, and
+  // reading it straight from the tracker avoids depending on when the reducer
+  // flushes.
   function report(event: ProgressEvent) {
-    if (event.kind === "source_done" && !event.notModified) {
-      setLines((prev) => [...prev.slice(-6), `${event.label}: ${event.fetched} jobs`]);
-    } else if (event.kind === "embed_progress") {
-      setLines((prev) => {
-        const kept = prev.filter((l) => !l.startsWith("Matching"));
-        return [...kept, `Matching jobs to you: ${event.done} of ${event.total}`];
-      });
-    } else if (event.kind === "note") {
-      setLines((prev) => [...prev.slice(-6), event.message]);
-    }
+    const next = trackerRef.current.apply(event, Date.now());
+    setProgress(next);
+    dispatch({ type: "search_progress", progress: next });
   }
 
   async function start() {
@@ -570,6 +625,8 @@ function FirstSearchStep({ onAllDone }: { onAllDone: () => void }) {
     } catch (err) {
       startedRef.current = false;
       setRunning(false);
+      trackerRef.current = new SearchProgressTracker();
+      setProgress(INITIAL_PROGRESS);
       const message = err instanceof Error ? err.message : String(err);
       setFailed(message);
       dispatch({ type: "search_failed", message });
@@ -578,8 +635,8 @@ function FirstSearchStep({ onAllDone }: { onAllDone: () => void }) {
 
   return (
     <>
-      <h1 className="text-3xl font-bold">Your first search</h1>
-      <p className="text-lg text-slate-700">
+      <h1 className="cn-wizard__title">Your first search</h1>
+      <p className="cn-wizard__lede">
         The first one is the slow one: I download a small matching tool (about 23 MB)
         and read every job closely. After this, searches are much faster. You can watch
         it work:
@@ -589,19 +646,23 @@ function FirstSearchStep({ onAllDone }: { onAllDone: () => void }) {
           Start the search
         </PrimaryButton>
       )}
-      {running && <Busy label="Searching..." />}
-      <div aria-live="polite" className="space-y-1 font-mono text-sm text-slate-600">
-        {lines.map((line, i) => (
-          <p key={i}>{line}</p>
-        ))}
-      </div>
+      {running && (
+        <RunProgress
+          phase={progress.phase}
+          firstRun
+          done={progress.done}
+          total={progress.total}
+          sources={progress.sources}
+          remaining={progress.remaining}
+        />
+      )}
       {failed !== null && (
         <>
           <Notice tone="warn">
             The search hit a problem: {failed}. Your setup is saved — you can try again
             now or later from the Jobs tab.
           </Notice>
-          <div className="flex gap-3">
+          <div className="row">
             <PrimaryButton onClick={() => void start()}>Try again</PrimaryButton>
             <QuietButton onClick={onAllDone}>Go to the app</QuietButton>
           </div>

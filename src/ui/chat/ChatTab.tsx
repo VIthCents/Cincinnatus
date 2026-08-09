@@ -17,7 +17,22 @@ import { adoptBaseResume, saveResumeDocx } from "../documents/actions.ts";
 import { FindingsList } from "../documents/FindingsList.tsx";
 import { ResumeView } from "../documents/ResumeView.tsx";
 import { usePrint } from "../documents/print.tsx";
-import { Busy, Notice, PrimaryButton, QuietButton } from "../components/ui.tsx";
+import { Icon } from "../components/Icon.tsx";
+import { Button, PrimaryButton } from "../components/ui.tsx";
+
+/** Ported from the design system (components/chat/TypingIndicator.jsx). */
+function TypingIndicator({ label = "Cincinnatus is writing…" }: { label?: string }) {
+  return (
+    <div className="cn-typing" role="status" aria-live="polite">
+      <span className="cn-typing__dots" aria-hidden="true">
+        <i />
+        <i />
+        <i />
+      </span>
+      <span>{label}</span>
+    </div>
+  );
+}
 
 /**
  * The Chat tab (SPEC §8). Free text goes to the scoped chat model; the three
@@ -212,66 +227,93 @@ export function ChatTab() {
     }
   }
 
+  const CHIPS = [
+    { label: "Look over my resume", run: () => void handleAnalyze() },
+    {
+      label: "Find me jobs",
+      run: () => {
+        dispatch({ type: "tab", tab: "jobs" });
+        void runSearchNow(dispatch);
+      },
+    },
+    { label: "Make my resume better", run: () => setReviseMode(true) },
+  ];
+
   return (
-    <div className="flex h-full flex-col">
-      <div className="grow space-y-4 overflow-y-auto p-6">
-        {state.chat.length === 0 && (
-          <Notice>
-            Hi — I'm here to help with your resume and your job search. Try one of the
-            buttons below, or just tell me what's going on.
-          </Notice>
-        )}
-        {state.chat.map((entry) => (
-          <ChatBubble key={entry.id} entry={entry} onPrint={print} />
-        ))}
-        {state.chatBusy && <Busy label="Thinking..." />}
-        {reviseMode && (
-          <Notice>
-            Tell me what to change, and I'll do it without touching anything else.
-          </Notice>
-        )}
-        <div ref={endRef} />
+    <div className="chat">
+      <div className="chat__scroll">
+        <div className="cn-chat">
+          {state.chat.length === 0 && (
+            <div className="cn-bubble cn-bubble--agent">
+              <span className="cn-bubble__who">Cincinnatus</span>
+              Hello. I am here to help with your resume and your job search. Pick one of
+              the buttons below, or just tell me what is going on.
+            </div>
+          )}
+          {state.chat.map((entry) => (
+            <ChatBubble key={entry.id} entry={entry} onPrint={print} />
+          ))}
+          {state.chatBusy && <TypingIndicator />}
+          {reviseMode && (
+            <div className="cn-bubble cn-bubble--agent">
+              <span className="cn-bubble__who">Cincinnatus</span>
+              Tell me what to change, and I will do it without touching anything else.
+            </div>
+          )}
+          <div ref={endRef} />
+        </div>
       </div>
 
-      <div className="border-t border-slate-200 p-4">
-        <div className="mb-3 flex flex-wrap gap-2">
-          <QuietButton disabled={state.chatBusy} onClick={() => void handleAnalyze()}>
-            Look over my resume
-          </QuietButton>
-          <QuietButton
-            disabled={state.chatBusy}
-            onClick={() => {
-              dispatch({ type: "tab", tab: "jobs" });
-              void runSearchNow(dispatch);
-            }}
-          >
-            Find me jobs
-          </QuietButton>
-          <QuietButton disabled={state.chatBusy} onClick={() => setReviseMode(true)}>
-            Make my resume better
-          </QuietButton>
+      <div className="chat__foot">
+        <div className="cn-chips">
+          {CHIPS.map((chip) => (
+            <button
+              key={chip.label}
+              type="button"
+              className="cn-chip"
+              disabled={state.chatBusy}
+              onClick={chip.run}
+            >
+              {chip.label}
+            </button>
+          ))}
         </div>
         <form
-          className="flex gap-2"
+          className="cn-composer"
           onSubmit={(e) => {
             e.preventDefault();
             submit();
           }}
         >
-          <input
+          <textarea
             aria-label="Message Cincinnatus"
-            className="grow rounded-lg border border-slate-300 px-4 py-3 text-lg focus:outline-none focus-visible:ring-4 focus-visible:ring-blue-400"
+            className="cn-composer__input"
+            rows={1}
             placeholder={reviseMode ? "What should I change?" : "Type here..."}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              // Enter sends; Shift+Enter makes a new line. A textarea that
+              // only sends on a button click hides the obvious action.
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                submit();
+              }
+            }}
           />
-          <PrimaryButton
+          <Button
+            icon="arrow_forward"
+            size="md"
             disabled={state.chatBusy || draft.trim() === ""}
             onClick={submit}
           >
             Send
-          </PrimaryButton>
+          </Button>
         </form>
+        <p className="chat__note">
+          What you type stays on this computer, except the words Cincinnatus sends to
+          the AI when you ask it for help.
+        </p>
       </div>
     </div>
   );
@@ -291,64 +333,68 @@ function ChatBubble({
   // (the text form exists so the persisted message survives restarts).
   const displayContent =
     entry.card?.kind === "critique"
-      ? "Here's my honest read of your resume:"
+      ? "Here is my honest read of your resume."
       : entry.content;
+
+  // Cards sit in the transcript beside the bubble, not inside it: the bubble
+  // is pre-wrapped text, and nesting a card in it inherits that whitespace.
   return (
-    <div className={isUser ? "flex justify-end" : "flex justify-start"}>
-      <div
-        className={
-          isUser
-            ? "max-w-[85%] rounded-2xl bg-blue-700 px-4 py-3 text-lg text-white"
-            : "max-w-[85%] rounded-2xl bg-slate-100 px-4 py-3 text-lg"
-        }
-      >
-        <p className="whitespace-pre-wrap">{displayContent}</p>
-        {entry.card?.kind === "critique" && (
-          <CritiqueCard critique={JSON.parse(entry.card.critiqueJson) as Critique} />
-        )}
-        {entry.card?.kind === "resume" && (
-          <ResumeCard
-            resume={JSON.parse(entry.card.resumeJson) as ResumeData}
-            findings={JSON.parse(entry.card.findingsJson) as Finding[]}
-            onPrint={onPrint}
-          />
-        )}
+    <>
+      <div className={`cn-bubble cn-bubble--${isUser ? "user" : "agent"}`}>
+        <span className="cn-bubble__who">{isUser ? "You" : "Cincinnatus"}</span>
+        {displayContent}
       </div>
-    </div>
+      {entry.card?.kind === "critique" && (
+        <CritiqueCard critique={JSON.parse(entry.card.critiqueJson) as Critique} />
+      )}
+      {entry.card?.kind === "resume" && (
+        <ResumeCard
+          resume={JSON.parse(entry.card.resumeJson) as ResumeData}
+          findings={JSON.parse(entry.card.findingsJson) as Finding[]}
+          onPrint={onPrint}
+        />
+      )}
+    </>
   );
 }
 
 function CritiqueCard({ critique }: { critique: Critique }) {
   return (
-    <div className="mt-3 space-y-3 rounded-lg border border-slate-300 bg-white p-4 text-base">
-      <p>{critique.summary}</p>
-      <div>
-        <p className="font-semibold">What's working:</p>
-        <ul className="ml-5 list-disc">
-          {critique.strengths.map((s, i) => (
-            <li key={i}>{s}</li>
-          ))}
-        </ul>
+    <div className="doc">
+      <div className="doc__head">
+        <Icon name="description" size={20} />
+        What I found
       </div>
-      <div>
-        <p className="font-semibold">What's holding it back:</p>
-        <ul className="ml-5 list-disc">
-          {critique.gaps.map((g, i) => (
-            <li key={i}>{g}</li>
-          ))}
-        </ul>
-      </div>
-      <div>
-        <p className="font-semibold">What to fix, one at a time:</p>
-        <ol className="ml-5 list-decimal space-y-2">
-          {critique.fixes.map((fix, i) => (
-            <li key={i}>
-              <p>{fix.what}</p>
-              <p className="text-slate-600">Why: {fix.why}</p>
-              <p className="text-slate-600">How: {fix.how}</p>
-            </li>
-          ))}
-        </ol>
+      <div className="doc__body">
+        <p>{critique.summary}</p>
+        <div>
+          <h4>What is working</h4>
+          <ul>
+            {critique.strengths.map((s, i) => (
+              <li key={i}>{s}</li>
+            ))}
+          </ul>
+        </div>
+        <div>
+          <h4>What is holding it back</h4>
+          <ul>
+            {critique.gaps.map((g, i) => (
+              <li key={i}>{g}</li>
+            ))}
+          </ul>
+        </div>
+        <div>
+          <h4>What to fix, one at a time</h4>
+          <ol>
+            {critique.fixes.map((fix, i) => (
+              <li key={i}>
+                <p>{fix.what}</p>
+                <p className="doc__meta">Why: {fix.why}</p>
+                <p className="doc__meta">How: {fix.how}</p>
+              </li>
+            ))}
+          </ol>
+        </div>
       </div>
     </div>
   );
@@ -369,18 +415,61 @@ function ResumeCard({
   const [savedTo, setSavedTo] = useState<string | null>(null);
 
   return (
-    <div className="mt-3 space-y-3 rounded-lg border border-slate-300 bg-white p-4">
+    <div className="stack stack--tight">
       <FindingsList findings={findings} context="authored" />
+
+      <div className="cn-doc">
+        <span className="cn-doc__icon" aria-hidden="true">
+          <Icon name="description" size={26} />
+        </span>
+        <span className="cn-doc__text">
+          <span className="cn-doc__name">Your revised resume</span>
+          <span className="cn-doc__meta">
+            {adopted ? "This is your resume now" : "Not saved as your resume yet"}
+          </span>
+        </span>
+        <span className="cn-doc__actions">
+          <Button
+            variant="secondary"
+            size="md"
+            onClick={() => setOpen(!open)}
+            ariaLabel={open ? "Hide the revised resume" : "View the revised resume"}
+          >
+            {open ? "Hide" : "View"}
+          </Button>
+          <Button
+            variant="quiet"
+            size="md"
+            onClick={() => {
+              void saveResumeDocx(resume).then((path) => setSavedTo(path));
+            }}
+            ariaLabel="Save the revised resume as a Word file"
+          >
+            Save
+          </Button>
+          <Button
+            variant="quiet"
+            size="md"
+            onClick={() => onPrint(<ResumeView resume={resume} />)}
+            ariaLabel="Print the revised resume"
+          >
+            Print
+          </Button>
+        </span>
+      </div>
+
       {open && (
-        <div className="max-h-96 overflow-y-auto rounded border border-slate-200 p-3">
-          <ResumeView resume={resume} />
+        <div className="doc">
+          <div className="doc__body">
+            <ResumeView resume={resume} />
+          </div>
         </div>
       )}
-      <div className="flex flex-wrap gap-2">
-        <QuietButton onClick={() => setOpen(!open)}>
-          {open ? "Hide it" : "View it"}
-        </QuietButton>
+
+      <div className="row">
         <PrimaryButton
+          size="md"
+          icon="check"
           disabled={adopted}
           onClick={() => {
             void adoptBaseResume(resume).then(() => {
@@ -391,19 +480,10 @@ function ResumeCard({
         >
           {adopted ? "This is your resume now" : "Use this as my resume"}
         </PrimaryButton>
-        <QuietButton
-          onClick={() => {
-            void saveResumeDocx(resume).then((path) => setSavedTo(path));
-          }}
-        >
-          Save as a Word file
-        </QuietButton>
-        <QuietButton onClick={() => onPrint(<ResumeView resume={resume} />)}>
-          Print
-        </QuietButton>
       </div>
+
       {savedTo !== null && (
-        <p className="text-base text-slate-600">Saved to {savedTo}</p>
+        <p className="prose--muted">Your resume is saved. Look in {savedTo}.</p>
       )}
     </div>
   );

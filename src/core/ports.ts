@@ -173,7 +173,16 @@ export interface Hasher {
 // Progress
 // -----------------------------------------------------------------------------
 
+/**
+ * The three stages a search moves through, named the way the UI says them out
+ * loud: "Finding jobs", "Reading jobs", "Putting them in order". The pipeline
+ * announces its own stage rather than letting the UI infer one from the event
+ * stream — inference gets it wrong on a run where nothing needs embedding.
+ */
+export type RunPhase = "finding" | "reading" | "ranking";
+
 export type ProgressEvent =
+  | { readonly kind: "phase"; readonly phase: RunPhase }
   | { readonly kind: "source_start"; readonly source: string; readonly label: string }
   | {
       readonly kind: "source_done";

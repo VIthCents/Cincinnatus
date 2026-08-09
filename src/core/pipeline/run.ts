@@ -46,6 +46,8 @@ export async function runPipeline(options: RunOptions): Promise<RunResult> {
 
   // --- fetch ---------------------------------------------------------------
 
+  reporter({ kind: "phase", phase: "finding" });
+
   const outcomes: SourceOutcome[] = [];
   const fetched: Job[] = [];
 
@@ -130,6 +132,15 @@ export async function runPipeline(options: RunOptions): Promise<RunResult> {
 
   let embeddedCount = 0;
 
+  // Announce the denominator before the first batch, not after it. On a first
+  // run the first batch can take a while, and a bar with no scale for that
+  // whole stretch is the thing this phase exists to prevent. A run with
+  // nothing new to read skips the phase entirely rather than showing 0 of 0.
+  if (toEmbed.length > 0) {
+    reporter({ kind: "phase", phase: "reading" });
+    reporter({ kind: "embed_progress", done: 0, total: toEmbed.length });
+  }
+
   for (let i = 0; i < toEmbed.length; i += EMBED_BATCH_SIZE) {
     const batchHashes = toEmbed.slice(i, i + EMBED_BATCH_SIZE);
     const batchTexts = batchHashes.map((h) => textForHash.get(h) ?? "");
@@ -174,6 +185,8 @@ export async function runPipeline(options: RunOptions): Promise<RunResult> {
   }
 
   // --- profile vector ------------------------------------------------------
+
+  reporter({ kind: "phase", phase: "ranking" });
 
   const profileText = buildProfileText(profile);
   const profileVectors = await embedder.embed([profileText]);

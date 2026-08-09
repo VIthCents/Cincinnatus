@@ -1,0 +1,319 @@
+/* Toast, error banner, empty state, progress.
+   Vendored from the Cincinnatus Design System (css/feedback.css);
+   reformatted by Prettier, so re-vendor by re-fetching and running `pnpm format`. */
+.cn-toast {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+  width: min(420px, calc(100vw - 48px));
+  padding: var(--space-5);
+  border: var(--border-width) solid var(--border-hairline);
+  border-radius: var(--radius-card);
+  background: var(--surface-card);
+  box-shadow: var(--shadow-3);
+}
+.cn-toast__icon {
+  flex: none;
+  margin-top: 1px;
+}
+.cn-toast--success .cn-toast__icon {
+  color: var(--success-text);
+}
+.cn-toast--error .cn-toast__icon {
+  color: var(--danger-text);
+}
+.cn-toast--info .cn-toast__icon {
+  color: var(--primary-text);
+}
+.cn-toast__body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.cn-toast__title {
+  font-size: var(--body-size);
+  font-weight: var(--weight-semibold);
+  color: var(--text-strong);
+}
+.cn-toast__desc {
+  font-size: var(--body-sm-size);
+  color: var(--text-muted);
+}
+.cn-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  border: var(--border-width) solid;
+  border-radius: var(--radius-card);
+}
+.cn-banner__icon {
+  flex: none;
+  margin-top: 1px;
+}
+.cn-banner__body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.cn-banner__title {
+  font-size: var(--body-size);
+  font-weight: var(--weight-semibold);
+  color: var(--text-strong);
+}
+.cn-banner__desc {
+  font-size: var(--body-size);
+  color: var(--text-body);
+  max-width: var(--measure);
+}
+.cn-banner__actions {
+  display: flex;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+}
+.cn-banner--error {
+  background: var(--danger-subtle);
+  border-color: var(--danger);
+}
+.cn-banner--error .cn-banner__icon {
+  color: var(--danger-text);
+}
+.cn-banner--caution {
+  background: var(--caution-subtle);
+  border-color: var(--caution);
+}
+.cn-banner--caution .cn-banner__icon {
+  color: var(--caution-text);
+}
+.cn-banner--info {
+  background: var(--primary-subtle);
+  border-color: var(--primary-subtle-border);
+}
+.cn-banner--info .cn-banner__icon {
+  color: var(--primary-text);
+}
+.cn-banner--success {
+  background: var(--success-subtle);
+  border-color: var(--success);
+}
+.cn-banner--success .cn-banner__icon {
+  color: var(--success-text);
+}
+.cn-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--space-4);
+  padding: var(--space-10) var(--space-6);
+  max-width: var(--measure);
+  margin: 0 auto;
+}
+.cn-empty__mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  border-radius: var(--radius-card);
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+}
+.cn-empty__title {
+  font-family: var(--font-display);
+  font-size: var(--title-1-size);
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--text-strong);
+}
+.cn-empty__desc {
+  font-size: var(--body-lg-size);
+  line-height: var(--body-lg-line);
+  color: var(--text-body);
+}
+.cn-empty__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  justify-content: center;
+  margin-top: var(--space-2);
+}
+/* Progress — indeterminate bar and long-task row with plain-language status */
+.cn-progress {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  max-width: var(--measure);
+}
+.cn-progress__label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--body-size);
+  color: var(--text-body);
+}
+.cn-progress__track {
+  position: relative;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--surface-sunken);
+  border: var(--border-width) solid var(--border-hairline);
+  overflow: hidden;
+}
+.cn-progress__fill {
+  height: 100%;
+  background: var(--primary);
+  transition: width var(--duration-base) var(--ease-out);
+}
+.cn-progress--indeterminate .cn-progress__fill {
+  width: 36%;
+  animation: cn-slide 1400ms var(--ease-in-out) infinite;
+}
+@keyframes cn-slide {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cn-progress--indeterminate .cn-progress__fill {
+    animation: none;
+    width: 100%;
+    opacity: 0.45;
+  }
+}
+.cn-progress__note {
+  font-size: var(--body-sm-size);
+  color: var(--text-muted);
+}
+/* Run progress — the first search, which takes 10 to 20 minutes. Phases, real
+   counts, the employer being read right now, and a way out of the screen. */
+.cn-run {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  max-width: var(--measure);
+  padding: var(--space-6);
+  border: var(--border-width) solid var(--border-hairline);
+  border-radius: var(--radius-card);
+  background: var(--surface-card);
+}
+.cn-run--compact {
+  padding: var(--space-5) var(--space-6);
+  gap: 0;
+}
+.cn-run__title {
+  font-family: var(--font-display);
+  font-size: var(--title-1-size);
+  font-weight: 600;
+  line-height: var(--title-1-line);
+  color: var(--text-strong);
+}
+.cn-run__note {
+  font-size: var(--body-size);
+  line-height: var(--body-line);
+  color: var(--text-body);
+  max-width: var(--measure);
+}
+.cn-run__phases {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.cn-run__phase {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--body-sm-size);
+  color: var(--text-muted);
+}
+.cn-run__phase.is-now {
+  color: var(--text-strong);
+  font-weight: var(--weight-semibold);
+}
+.cn-run__phase.is-done {
+  color: var(--text-body);
+}
+.cn-run__phase svg {
+  flex: none;
+}
+.cn-run__phase.is-done svg {
+  color: var(--success-text);
+  fill: var(--success-text);
+}
+.cn-run__phase-state {
+  margin-left: auto;
+  font-size: var(--meta-size);
+  letter-spacing: var(--meta-track);
+  color: var(--text-muted);
+}
+.cn-run__bar {
+  padding-top: var(--space-1);
+}
+.cn-run__sources {
+  display: flex;
+  flex-direction: column;
+  list-style: none;
+  margin: 0;
+  padding: var(--space-4) 0 0;
+  border-top: var(--border-width) solid var(--border-hairline);
+}
+.cn-run__source {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 32px;
+  font-size: var(--body-sm-size);
+  color: var(--text-body);
+}
+.cn-run__source svg {
+  flex: none;
+  fill: var(--text-muted);
+}
+.cn-run__source.is-done svg,
+.cn-run__source.is-unchanged svg {
+  fill: var(--success-text);
+}
+.cn-run__source.is-error svg {
+  fill: var(--danger-text);
+}
+.cn-run__source-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cn-run__source-state {
+  margin-left: auto;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.cn-run__source.is-error .cn-run__source-state {
+  color: var(--danger-text);
+}
+.cn-run__leave {
+  font-size: var(--body-sm-size);
+  color: var(--text-muted);
+}
+.cn-run__leave-btn {
+  min-height: var(--hit-min);
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: var(--weight-semibold);
+  color: var(--text-link);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.cn-run__leave-btn:hover {
+  color: var(--text-link-hover);
+  text-decoration-thickness: 2px;
+}

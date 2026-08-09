@@ -1,0 +1,283 @@
+/* The app shell and the modal — the two pieces the design system does not
+   ship, written the same way its own kit.css is: layout only, every colour,
+   size, radius and duration read from the tokens above. Nothing here invents
+   a value.
+
+   Shell structure is the design system's (ui_kits/cincinnatus-app/App.jsx):
+   a header carrying the mark, the tab bar and Settings, over a scrolling body. */
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--surface-app);
+}
+
+.app__head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  padding: 0 var(--gutter);
+  border-bottom: var(--border-width) solid var(--border-hairline);
+  background: var(--surface-app);
+}
+
+/* The tab bar draws its own bottom rule; inside the header the header's rule
+   is the one that should show, or the two stack into a 2px line. */
+.app__head .cn-tabs {
+  flex: 1;
+  border-bottom: 0;
+  margin-bottom: -1px;
+}
+
+.app__mark {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-family: var(--font-display);
+  font-size: var(--label-size);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--label-track);
+  color: var(--text-strong);
+  white-space: nowrap;
+}
+
+.app__body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+/* Opportunities and Settings share one measure and one gutter. Chat sets its
+   own (kit.css) because its composer is pinned to the bottom. */
+.screen {
+  max-width: 1024px;
+  margin: 0 auto;
+  padding: var(--space-7) var(--gutter) var(--space-9);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.screen__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.screen__title {
+  font-family: var(--font-display);
+  font-size: var(--title-1-size);
+  font-weight: 600;
+  line-height: var(--title-1-line);
+  color: var(--text-strong);
+}
+
+/* ── Modal ─────────────────────────────────────────────────────────────────
+   Prepare and the resume review both open over the list. Scrim is the ink
+   anchor at 60%, which is the same veil the design system uses for its own
+   overlays. */
+.cn-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-6);
+  background: color-mix(in srgb, var(--ink-900) 62%, transparent);
+}
+
+.cn-modal__panel {
+  width: 100%;
+  max-width: 560px;
+  max-height: 92%;
+  overflow-y: auto;
+  padding: var(--space-7);
+  border: var(--border-width) solid var(--border-hairline);
+  border-radius: var(--radius-card);
+  background: var(--surface-card);
+  box-shadow: var(--shadow-3);
+  outline: none;
+}
+
+.cn-modal__panel--wide {
+  max-width: 1024px;
+}
+
+/* The review screen brings its own gutter; inside a modal the panel already
+   supplies one, and two of them squeeze the two columns. */
+.cn-modal__panel .review {
+  padding: 0;
+}
+
+.cn-modal__title {
+  font-family: var(--font-display);
+  font-size: var(--title-1-size);
+  font-weight: 600;
+  line-height: var(--title-1-line);
+  color: var(--text-strong);
+}
+
+.cn-modal__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.cn-modal__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+/* A stack of things that read as one thought: a heading and its paragraphs,
+   a question and its field. */
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.stack--tight {
+  gap: var(--space-3);
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.prose {
+  font-size: var(--body-lg-size);
+  line-height: var(--body-lg-line);
+  color: var(--text-body);
+  max-width: var(--measure);
+}
+
+.prose--muted {
+  font-size: var(--body-size);
+  line-height: var(--body-line);
+  color: var(--text-muted);
+}
+
+/* The wizard's resume drop target. wizard.css ships the paste box but not a
+   file drop, and this one has to read as "put something here" from across a
+   room. */
+.cn-drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-9) var(--space-6);
+  border: var(--border-width-strong) dashed var(--border-strong);
+  border-radius: var(--radius-card);
+  background: var(--surface-card);
+  text-align: center;
+}
+
+/* City and state: one question split across two boxes, so they stay on one
+   line and the narrow one does not stretch. */
+.cn-pair {
+  display: flex;
+  gap: var(--space-4);
+  align-items: flex-start;
+}
+
+.cn-pair > .cn-field {
+  flex: 1;
+}
+
+.cn-pair > .cn-pair__narrow {
+  flex: none;
+  width: 9ch;
+}
+
+/* ── The documents themselves ──────────────────────────────────────────────
+   The resume and the cover letter, as the person will see them and as they
+   will print. One class family for both, so what is on screen is what comes
+   out of the printer. */
+.paper {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  font-size: var(--body-sm-size);
+  line-height: 1.6;
+  color: var(--text-body);
+}
+
+.paper__name {
+  font-family: var(--font-display);
+  font-size: var(--title-1-size);
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--text-strong);
+}
+
+.paper__contact,
+.paper__meta {
+  color: var(--text-muted);
+}
+
+.paper h4 {
+  margin-bottom: var(--space-2);
+  font-size: var(--label-size);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--label-track);
+  text-transform: uppercase;
+  color: var(--text-strong);
+}
+
+.paper ul {
+  margin: var(--space-1) 0 0;
+  padding-left: var(--space-6);
+}
+
+.paper li {
+  margin-bottom: 2px;
+}
+
+.paper__roles {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.paper__role {
+  font-weight: var(--weight-semibold);
+  color: var(--text-strong);
+}
+
+/* kit.css styles the document panel's headings but not its lists, and the
+   critique is mostly lists. Same shape the job card's detail list uses. */
+.doc__body ul,
+.doc__body ol {
+  margin: var(--space-2) 0 0;
+  padding-left: var(--space-6);
+}
+
+.doc__body li {
+  margin-bottom: var(--space-2);
+}
+
+/* The entity check's flags, inside a banner. */
+.findings {
+  margin: var(--space-1) 0 var(--space-2);
+  padding-left: var(--space-6);
+}
+
+.findings li {
+  margin-bottom: var(--space-1);
+}

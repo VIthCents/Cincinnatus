@@ -1,22 +1,25 @@
-@import "tailwindcss";
-
-/* Cincinnatus is used by people who may be on an old laptop, on a phone-sized
-   window, or using a screen reader. Defaults are therefore large and
-   high-contrast rather than dense. Do not shrink these without a reason. */
-:root {
-  font-size: 18px;
-}
-
-/* Respect the OS "reduce motion" setting. */
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
-}
+/* The Cincinnatus Design System, vendored.
+ *
+ * tokens/tailwind4.css imports Tailwind itself plus the palette, the type
+ * scale, the spacing scale and the reset — it is the whole theme, and it
+ * CLOSES it: Tailwind's default palette, type ladder, radii and shadows are
+ * deleted, so `bg-red-500` or `text-2xl` fail the build rather than shipping
+ * an off-brand colour. See src/ui/tokens/tailwind4.css for why.
+ *
+ * The five component stylesheets below are the design system's own reference
+ * implementation, vendored verbatim. Using them directly rather than
+ * hand-translating every rule into Tailwind utilities keeps the app
+ * byte-faithful to the spec and keeps `.dark` working through the same
+ * tokens. See docs/DECISIONS.md.
+ */
+@import "./tokens/tailwind4.css";
+@import "./tokens/controls.css";
+@import "./tokens/feedback.css";
+@import "./tokens/chat.css";
+@import "./tokens/opportunities.css";
+@import "./tokens/wizard.css";
+@import "./tokens/kit.css";
+@import "./tokens/app.css";
 
 /* Printing: only the document in #print-host reaches the page. The system
    print dialog's "Save as PDF" is how the app exports PDFs. */
@@ -30,7 +33,15 @@
   }
   #print-host {
     display: block;
-    color: #000;
+    background: #fff;
     font-size: 11pt;
+
+    /* Paper is white whatever the screen is. Without this, printing while the
+       app is in dark mode puts pale grey text on a white page. The hierarchy
+       is kept — three weights of black, not one flat one. */
+    --text-strong: #000;
+    --text-body: #111;
+    --text-muted: #444;
+    color: var(--text-body);
   }
 }

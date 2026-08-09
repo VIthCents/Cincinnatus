@@ -1,4 +1,5 @@
 import type { Dispatch } from "react";
+import { SearchProgressTracker } from "../../core/app/progress.ts";
 import * as repo from "../../core/db/repo.ts";
 import type { ProgressEvent } from "../../core/ports.ts";
 import { db, runSearch } from "./services.ts";
@@ -31,17 +32,10 @@ export async function runSearchNow(
   searchInFlight = true;
   dispatch({ type: "search_start" });
 
+  const tracker = new SearchProgressTracker();
+
   const report = (event: ProgressEvent): void => {
-    if (event.kind === "source_start") {
-      dispatch({ type: "search_status", message: `Checking ${event.label}...` });
-    } else if (event.kind === "embed_progress") {
-      dispatch({
-        type: "search_status",
-        message: `Matching jobs to you: ${event.done} of ${event.total}`,
-      });
-    } else if (event.kind === "note") {
-      dispatch({ type: "search_status", message: event.message });
-    }
+    dispatch({ type: "search_progress", progress: tracker.apply(event, Date.now()) });
   };
 
   try {

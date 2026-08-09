@@ -7,6 +7,8 @@ import {
   type Dispatch,
   type ReactNode,
 } from "react";
+import { INITIAL_PROGRESS, type SearchProgress } from "../../core/app/progress.ts";
+import { isThemePreference, type ThemePreference } from "./theme.ts";
 import type { Profile, RankedJob, RunReport } from "../../core/types.ts";
 import type { ResumeData } from "../../core/documents/types.ts";
 import { verifyResume } from "../../core/documents/verify.ts";
@@ -50,12 +52,22 @@ export interface AppState {
   readonly ranked: readonly RankedJob[] | null;
   readonly lastReport: RunReport | null;
   readonly searching: boolean;
+  /** What the run is doing right now. Only meaningful while `searching`. */
+  readonly progress: SearchProgress;
+  /** Plain-words message left over from the last run: a warning or an error. */
   readonly searchStatus: string;
+  /**
+   * False until a search has finished once on this machine. Drives the "the
+   * first search takes 10 to 20 minutes" advisory — after that it would be a
+   * lie, so it stops being shown.
+   */
+  readonly hasSearched: boolean;
   readonly hidden: ReadonlySet<string>;
   /** The veteran's saved 👍/👎 per job, restored across launches. */
   readonly feedback: ReadonlyMap<string, "up" | "down">;
   readonly chat: readonly ChatEntry[];
   readonly chatBusy: boolean;
+  readonly theme: ThemePreference;
 }
 
 const initialState: AppState = {
@@ -69,11 +81,14 @@ const initialState: AppState = {
   ranked: null,
   lastReport: null,
   searching: false,
+  progress: INITIAL_PROGRESS,
   searchStatus: "",
+  hasSearched: false,
   hidden: new Set(),
   feedback: new Map(),
   chat: [],
   chatBusy: false,
+  theme: "system",
 };
 
 export type Action =
@@ -84,9 +99,11 @@ export type Action =
       profile: Profile | null;
       keys: { anthropic: boolean; usajobs: boolean };
       ranked: readonly RankedJob[] | null;
+      hasSearched: boolean;
       hidden: ReadonlySet<string>;
       feedback: ReadonlyMap<string, "up" | "down">;
       chat: readonly ChatEntry[];
+      theme: ThemePreference;
     }
   | { type: "boot_failed"; message: string }
   | { type: "tab"; tab: Tab }
@@ -95,7 +112,7 @@ export type Action =
   | { type: "profile"; profile: Profile }
   | { type: "keys"; keys: { anthropic: boolean; usajobs: boolean } }
   | { type: "search_start" }
-  | { type: "search_status"; message: string }
+  | { type: "search_progress"; progress: SearchProgress }
   | { type: "feedback"; jobId: string; verdict: "up" | "down" | null }
   | {
       type: "search_done";
@@ -106,7 +123,8 @@ export type Action =
   | { type: "search_failed"; message: string }
   | { type: "hide_job"; jobId: string }
   | { type: "chat_add"; entry: ChatEntry }
-  | { type: "chat_busy"; busy: boolean };
+  | { type: "chat_busy"; busy: boolean }
+  | { type: "theme"; theme: ThemePreference };
 
 function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
@@ -120,9 +138,11 @@ function reducer(state: AppState, action: Action): AppState {
         profile: action.profile,
         keys: action.keys,
         ranked: action.ranked,
+        hasSearched: action.hasSearched,
         hidden: action.hidden,
         feedback: action.feedback,
         chat: action.chat,
+        theme: action.theme,
       };
     case "boot_failed":
       return { ...state, booted: false, bootError: action.message };
@@ -137,9 +157,14 @@ function reducer(state: AppState, action: Action): AppState {
     case "keys":
       return { ...state, keys: action.keys };
     case "search_start":
-      return { ...state, searching: true, searchStatus: "Starting the search..." };
-    case "search_status":
-      return { ...state, searchStatus: action.message };
+      return {
+        ...state,
+        searching: true,
+        progress: INITIAL_PROGRESS,
+        searchStatus: "",
+      };
+    case "search_progress":
+      return { ...state, progress: action.progress };
     case "search_done":
       return {
         ...state,
@@ -148,6 +173,7 @@ function reducer(state: AppState, action: Action): AppState {
         searchStatus: action.warning,
         ranked: action.ranked,
         lastReport: action.report,
+        hasSearched: true,
       };
     case "search_failed":
       return { ...state, searching: false, searchStatus: action.message };
@@ -166,6 +192,8 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, chat: [...state.chat, action.entry] };
     case "chat_busy":
       return { ...state, chatBusy: action.busy };
+    case "theme":
+      return { ...state, theme: action.theme };
   }
 }
 
@@ -194,6 +222,7 @@ async function boot(dispatch: Dispatch<Action>): Promise<void> {
     ups,
     downs,
     chatRows,
+    themeSetting,
   ] = await Promise.all([
     repo.getSetting(db, "wizard_done"),
     repo.getLatestDocument(db, "base_resume"),
@@ -204,15 +233,23 @@ async function boot(dispatch: Dispatch<Action>): Promise<void> {
     repo.listFeedback(db, "up"),
     repo.listFeedback(db, "down"),
     repo.listRecentChatMessages(db, 50),
+    repo.getSetting(db, "theme"),
   ]);
 
   const resume =
     baseResume === null ? null : (JSON.parse(baseResume.content) as ResumeData);
 
   let ranked: readonly RankedJob[] | null = null;
+  // A completed run on record means the jobs are already read and stored, so
+  // the next search is the fast kind. That is the whole basis for whether the
+  // "first search is slow" advisory is true.
+  let hasSearched = false;
   try {
     const last = await loadLastRanking();
-    if (last !== null) ranked = last.ranked.ranked;
+    if (last !== null) {
+      ranked = last.ranked.ranked;
+      hasSearched = true;
+    }
   } catch {
     // A failed re-rank must not stop the app from opening.
   }
@@ -256,9 +293,11 @@ async function boot(dispatch: Dispatch<Action>): Promise<void> {
     profile,
     keys: { anthropic, usajobs },
     ranked,
+    hasSearched,
     hidden,
     feedback,
     chat,
+    theme: isThemePreference(themeSetting) ? themeSetting : "system",
   });
 }
 

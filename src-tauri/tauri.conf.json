@@ -14,10 +14,10 @@
       {
         "label": "main",
         "title": "Cincinnatus",
-        "width": 1000,
-        "height": 720,
-        "minWidth": 640,
-        "minHeight": 520
+        "width": 1180,
+        "height": 800,
+        "minWidth": 1024,
+        "minHeight": 700
       }
     ],
     "security": {

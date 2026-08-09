@@ -1,0 +1,304 @@
+/* ── Cincinnatus × Tailwind 4 ─────────────────────────────────────────────
+   Vendored from the Cincinnatus Design System (tokens/tailwind4.css).
+   This is the only file the app imports; it imports Tailwind itself.
+
+   Local changes from the design-system original, and only these:
+   - @font-face paths point at ./fonts/ (this app vendors the woff2 to
+     src/ui/fonts/, which the original names as the expected layout).
+   Everything else is verbatim. Do not "tidy" it — the comments explain
+   invariants that are easy to break by accident.
+
+   Three things about v4 that this file answers up front:
+
+   1. THE .dark STRATEGY SURVIVES, INTACT. Components need no `dark:`
+      prefixes, because the palette is NOT declared inside `@theme` — it
+      stays in :root / .dark blocks in colors.css, and `@theme inline` only
+      points at it. `inline` is load-bearing: a plain `@theme` would copy the
+      value into a static custom property and `.dark` would have nothing left
+      to re-theme. Delete the word `inline` and dark mode silently stops
+      working — utilities keep resolving, they just resolve to light values.
+
+   2. THE THEME IS CLOSED. Every namespace is reset with `*: initial` before
+      the system's tokens are added, so Tailwind's defaults are gone: no
+      `bg-red-500`, no `text-2xl`, no `rounded-full`, no `shadow-lg`. A colour
+      outside the six anchors fails the build instead of shipping.
+
+   3. THREE NAMES CHANGED, because v4's namespaces collide with token names
+      this system already uses:
+      ── v3 ──────────────── v4 ─────────── why
+      text-body (17px)       text-base      `--text-body` is already the body
+                                            *colour*. v4 would overwrite it.
+      shadow-1/2/3           shadow-e1/2/3  `--shadow-*` is v4's namespace and
+                                            `.dark` re-declares --shadow-1.
+      border-border-strong   border-touchable  v3's key produced a doubled
+                                            class, and `border-strong` would
+                                            have collided with the text colour.
+   ────────────────────────────────────────────────────────────────────────── */
+
+@import "tailwindcss";
+@import "./colors.css"; /* the palette, in :root and .dark. Referenced, never copied. */
+@import "./typography.css"; /* raw type values, referenced by the roles below */
+@import "./spacing.css"; /* --space-1..12, --hit-min, --gutter */
+@import "./base.css"; /* reset, body type, the two-part focus ring */
+
+/* ── dark ─────────────────────────────────────────────────────────────────
+   The v3 `darkMode: "class"` equivalent. `.dark` goes on <html>. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ── @font-face ───────────────────────────────────────────────────────────
+   Self-hosted and same-origin, which the app's CSP requires
+   (`default-src 'self'`; nothing loads from a CDN). Vite fingerprints these. */
+@font-face {
+  font-family: "Public Sans";
+  font-style: normal;
+  font-weight: 300 800;
+  font-display: swap;
+  src: url("../fonts/PublicSans-Roman.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Public Sans";
+  font-style: italic;
+  font-weight: 300 800;
+  font-display: swap;
+  src: url("../fonts/PublicSans-Italic.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Newsreader";
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url("../fonts/Newsreader-Roman.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Newsreader";
+  font-style: italic;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url("../fonts/Newsreader-Italic.woff2") format("woff2");
+}
+
+/* Shape values that are not a Tailwind namespace, and that base.css needs. */
+:root {
+  --border-width: 1px;
+  --border-width-strong: 2px;
+  --focus-gap-width: 2px;
+  --focus-ring-width: 3px;
+}
+
+@theme inline {
+  /* ── colour ────────────────────────────────────────────────────────────
+     Reset first: Tailwind's 22-hue default palette is deleted. Six anchors
+     only. Every value is a var() from colors.css, so `.dark` re-themes all
+     of it and no component ever writes `dark:`. */
+  --color-*: initial;
+
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-active: var(--primary-active);
+  --color-primary-subtle: var(--primary-subtle);
+  --color-primary-subtle-border: var(--primary-subtle-border);
+  --color-primary-text: var(--primary-text);
+
+  --color-accent: var(--accent);
+  --color-accent-subtle: var(--accent-subtle);
+  --color-accent-text: var(--accent-text);
+
+  --color-success: var(--success);
+  --color-success-subtle: var(--success-subtle);
+  --color-success-text: var(--success-text);
+  --color-caution: var(--caution);
+  --color-caution-subtle: var(--caution-subtle);
+  --color-caution-text: var(--caution-text);
+  --color-danger: var(--danger);
+  --color-danger-hover: var(--danger-hover);
+  --color-danger-subtle: var(--danger-subtle);
+  --color-danger-text: var(--danger-text);
+
+  --color-surface-app: var(--surface-app);
+  --color-surface-card: var(--surface-card);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-surface-hover: var(--surface-hover);
+  --color-surface-selected: var(--surface-selected);
+  --color-surface-inverse: var(--surface-inverse);
+
+  /* text colours. `text-strong`, `text-body`, `text-muted` are unchanged
+     from v3 — they do not collide, because the type roles below are named
+     text-base / text-lg / text-sm rather than text-body / text-body-lg. */
+  --color-strong: var(--text-strong);
+  --color-body: var(--text-body);
+  --color-muted: var(--text-muted);
+  --color-inverse: var(--text-inverse);
+  --color-on-primary: var(--text-on-primary);
+  --color-link: var(--text-link);
+  --color-link-hover: var(--text-link-hover);
+
+  /* borders. `border-touchable` is the v3 `border-strong`, renamed: v3's key
+     produced the doubled class `border-border-strong`, and the obvious
+     shortening would have collided with the `strong` text colour. The name
+     is the system's own sentence — hairline separates, strong means you can
+     touch it. */
+  --color-hairline: var(--border-hairline);
+  --color-touchable: var(--border-strong);
+  --color-inverse-edge: var(--border-inverse);
+
+  --color-focus-ring: var(--focus-ring);
+  --color-match-fair: var(--match-fair);
+  --color-match-good: var(--match-good);
+  --color-match-strong: var(--match-strong);
+
+  /* ── type ──────────────────────────────────────────────────────────────
+     Reset first, then the nine roles and nothing else: text-xs, text-2xl
+     and the rest of Tailwind's ladder no longer exist.
+
+     RENAME: v3's `text-body` (17px) is `text-base` here. `--text-body` is
+     already the body *colour* in colors.css; declaring it as a font size
+     would overwrite the colour in :root and break every `var(--text-body)`
+     in the reference CSS. */
+  --text-*: initial;
+
+  --text-display-1: var(--display-1-size);
+  --text-display-1--line-height: var(--display-1-line);
+  --text-display-1--letter-spacing: var(--display-1-track);
+  --text-display-1--font-weight: var(--display-1-weight);
+
+  --text-display-2: var(--display-2-size);
+  --text-display-2--line-height: var(--display-2-line);
+  --text-display-2--letter-spacing: var(--display-2-track);
+  --text-display-2--font-weight: var(--display-2-weight);
+
+  --text-title-1: var(--title-1-size);
+  --text-title-1--line-height: var(--title-1-line);
+  --text-title-1--letter-spacing: var(--title-1-track);
+  --text-title-1--font-weight: var(--title-1-weight);
+
+  --text-title-2: var(--title-2-size);
+  --text-title-2--line-height: var(--title-2-line);
+  --text-title-2--letter-spacing: var(--title-2-track);
+  --text-title-2--font-weight: var(--title-2-weight);
+
+  --text-lg: var(--body-lg-size); /* chat and wizard prose */
+  --text-lg--line-height: var(--body-lg-line);
+  --text-lg--letter-spacing: var(--body-lg-track);
+  --text-lg--font-weight: var(--body-lg-weight);
+
+  --text-base: var(--body-size); /* the body role — v3 `text-body` */
+  --text-base--line-height: var(--body-line);
+  --text-base--letter-spacing: var(--body-track);
+  --text-base--font-weight: var(--body-weight);
+
+  --text-sm: var(--body-sm-size);
+  --text-sm--line-height: var(--body-sm-line);
+  --text-sm--letter-spacing: var(--body-sm-track);
+  --text-sm--font-weight: var(--body-sm-weight);
+
+  --text-label: var(--label-size);
+  --text-label--line-height: var(--label-line);
+  --text-label--letter-spacing: var(--label-track);
+  --text-label--font-weight: var(--label-weight);
+
+  --text-meta: var(--meta-size);
+  --text-meta--line-height: var(--meta-line);
+  --text-meta--letter-spacing: var(--meta-track);
+  --text-meta--font-weight: var(--meta-weight);
+
+  --font-*: initial;
+  --font-sans: var(--font-ui);
+  --font-display: var(--font-display);
+  --font-mono: var(--font-mono);
+
+  --font-weight-*: initial;
+  --font-weight-regular: var(--weight-regular);
+  --font-weight-medium: var(--weight-medium);
+  --font-weight-semibold: var(--weight-semibold);
+  --font-weight-bold: var(--weight-bold);
+
+  /* ── spacing ───────────────────────────────────────────────────────────
+     THE COLLISION, AND THE RULING.
+
+     v4 has no spacing scale — it has one multiplier, `--spacing: 0.25rem`,
+     and derives every numeric utility from it: p-3 is 3 × 4px = 12px. This
+     system's 3 is 8px. Left alone, every `p-3` `gap-6` `mt-5` in the app
+     would be silently wrong by 50–100% and nothing would error.
+
+     Ruling: keep the numeric names, declare all twelve explicitly, then KILL
+     THE MULTIPLIER with `--spacing: initial`. With the multiplier alive, p-3
+     would be right (declared) and p-13 quietly wrong (derived); with it
+     dead, p-13 is not a class at all and the build tells you.
+
+     Cost, stated plainly: utilities that derive from the multiplier and have
+     no numeric token — size-*, w-*, h-* with bare numbers — are gone too.
+     Use the named tokens, a fraction (w-1/2), or an arbitrary value where a
+     one-off is genuinely a one-off. */
+  --spacing: initial;
+  --spacing-0: var(--space-0);
+  --spacing-1: var(--space-1); /*  2px — optical nudge only */
+  --spacing-2: var(--space-2); /*  4px — optical nudge only */
+  --spacing-3: var(--space-3); /*  8px */
+  --spacing-4: var(--space-4); /* 12px */
+  --spacing-5: var(--space-5); /* 16px */
+  --spacing-6: var(--space-6); /* 24px */
+  --spacing-7: var(--space-7); /* 32px */
+  --spacing-8: var(--space-8); /* 40px */
+  --spacing-9: var(--space-9); /* 48px */
+  --spacing-10: var(--space-10); /* 64px */
+  --spacing-11: var(--space-11); /* 80px */
+  --spacing-12: var(--space-12); /* 96px */
+  --spacing-hit: var(--hit-min); /* 44px — min-h-hit on every interactive element */
+  --spacing-gutter: var(--gutter);
+  --spacing-gutter-wide: var(--gutter-wide);
+
+  --container-*: initial;
+  --container-measure: var(--measure); /* max-w-measure — 64ch */
+  --container-measure-tight: var(--measure-tight); /* max-w-measure-tight — 44ch */
+  --container-window: var(--window-min-w); /* 1024px — the minimum window */
+
+  /* ── shape ─────────────────────────────────────────────────────────────
+     rounded-full is deleted along with the rest. There are no pills in this
+     system; 999px is the toggle knob, and the toggle knob is in the CSS. */
+  --radius-*: initial;
+  --radius-none: 0px;
+  --radius-control: 3px; /* buttons, inputs, chips, badges */
+  --radius-card: 6px; /* cards, panels, dialogs */
+  --radius-bubble: 8px; /* chat bubbles */
+  --radius-round: 999px; /* toggle knob and avatar only */
+
+  /* RENAME: shadow-1/2/3 → shadow-e1/e2/e3. `--shadow-*` is v4's own
+     namespace and colors.css already declares --shadow-1..3 with a .dark
+     override; e-prefixed names keep the var() reference — and therefore the
+     dark values — instead of shadowing them. */
+  --shadow-*: initial;
+  --shadow-e1: var(--shadow-1);
+  --shadow-e2: var(--shadow-2);
+  --shadow-e3: var(--shadow-3);
+
+  /* ── motion ────────────────────────────────────────────────────────────
+     Three durations, two curves. */
+  --ease-*: initial;
+  --ease-out: cubic-bezier(0.2, 0.8, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --default-transition-timing-function: var(--ease-out);
+  --default-transition-duration: 120ms;
+}
+
+@theme {
+  --duration-fast: 120ms; /* hover and press */
+  --duration-base: 180ms; /* open and close */
+  --duration-slow: 260ms; /* the wizard step transition — the only one */
+}
+
+/* Reduced motion collapses all three and stops the two loops outright. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-fast: 1ms;
+    --duration-base: 1ms;
+    --duration-slow: 1ms;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+}

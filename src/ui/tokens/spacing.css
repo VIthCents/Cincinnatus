@@ -1,0 +1,23 @@
+/* 8pt base. 2 and 4 exist for optical nudges only. */
+:root {
+  --space-0: 0;
+  --space-1: 2px;
+  --space-2: 4px;
+  --space-3: 8px;
+  --space-4: 12px;
+  --space-5: 16px;
+  --space-6: 24px;
+  --space-7: 32px;
+  --space-8: 40px;
+  --space-9: 48px;
+  --space-10: 64px;
+  --space-11: 80px;
+  --space-12: 96px;
+  --hit-min: 44px; /* every click target, no exceptions */
+  --window-min-w: 1024px;
+  --window-min-h: 700px;
+  --window-default-w: 1180px;
+  --window-default-h: 800px; /* Tauri opens here. See guidelines/handoff.md § Window size. */
+  --gutter: 24px; /* screen edge padding */
+  --gutter-wide: 40px; /* wizard + review screens */
+}

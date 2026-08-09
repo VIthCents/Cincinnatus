@@ -11,6 +11,7 @@ import { tauriClock } from "../tauri/clock.ts";
 
 import { db } from "./app/services.ts";
 import { runSearchNow } from "./app/searchRunner.ts";
+import { watchSystemTheme } from "./app/theme.ts";
 import {
   AppProvider,
   useAppDispatch,
@@ -23,7 +24,8 @@ import { Wizard } from "./wizard/Wizard.tsx";
 import { ChatTab } from "./chat/ChatTab.tsx";
 import { OpportunitiesTab } from "./jobs/OpportunitiesTab.tsx";
 import { SettingsTab } from "./settings/SettingsTab.tsx";
-import { Busy, Notice, PrimaryButton } from "./components/ui.tsx";
+import { Mark } from "./components/Mark.tsx";
+import { Banner, Busy, IconButton, PrimaryButton, TabBar } from "./components/ui.tsx";
 
 export default function App() {
   return (
@@ -56,6 +58,11 @@ function Shell() {
   const state = useAppState();
   const dispatch = useAppDispatch();
 
+  // The design system's dark palette lives behind a `.dark` class on the root
+  // element, so something has to put it there — and keep following the
+  // computer's own setting while the preference is "system".
+  useEffect(() => watchSystemTheme(state.theme), [state.theme]);
+
   // Tray "Search for jobs now" + the Rust scheduler metronome.
   useEffect(() => {
     if (!state.booted || state.needsWizard) return;
@@ -86,15 +93,21 @@ function Shell() {
 
   if (!state.booted) {
     return (
-      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-5 p-8">
-        {state.bootError === "" ? (
-          <Busy label="Starting up..." />
-        ) : (
-          <>
-            <Notice tone="warn">{state.bootError}</Notice>
-            <BootRetryButton />
-          </>
-        )}
+      <main className="app">
+        <div className="screen">
+          {state.bootError === "" ? (
+            <Busy label="Starting up..." />
+          ) : (
+            <div className="stack">
+              <Banner tone="error" title="Cincinnatus could not open its saved data.">
+                {state.bootError}
+              </Banner>
+              <div className="row">
+                <BootRetryButton />
+              </div>
+            </div>
+          )}
+        </div>
       </main>
     );
   }
@@ -103,14 +116,44 @@ function Shell() {
     return <Wizard />;
   }
 
+  const visibleJobs =
+    state.ranked === null
+      ? null
+      : state.ranked.filter((r) => !state.hidden.has(r.job.id)).length;
+
   return (
-    <div className="flex h-screen flex-col">
-      <TabBar />
-      <div className="min-h-0 grow overflow-y-auto">
+    <div className="app">
+      <header className="app__head">
+        <span className="app__mark">
+          <Mark />
+          <span>CINCINNATUS</span>
+        </span>
+        <MainTabs jobCount={visibleJobs} />
+        <IconButton
+          icon="settings"
+          label="Settings"
+          bordered={state.tab === "settings"}
+          pressed={state.tab === "settings"}
+          onClick={() =>
+            dispatch({
+              type: "tab",
+              tab: state.tab === "settings" ? "chat" : "settings",
+            })
+          }
+        />
+      </header>
+
+      <main
+        className="app__body"
+        id={`panel-${state.tab}`}
+        role={state.tab === "settings" ? undefined : "tabpanel"}
+        aria-labelledby={state.tab === "settings" ? undefined : `tab-${state.tab}`}
+        tabIndex={-1}
+      >
         {state.tab === "chat" && <ChatTab />}
         {state.tab === "jobs" && <OpportunitiesTab />}
         {state.tab === "settings" && <SettingsTab />}
-      </div>
+      </main>
     </div>
   );
 }
@@ -124,40 +167,36 @@ function BootRetryButton() {
   );
 }
 
-const TABS: { id: Tab; label: string }[] = [
-  { id: "chat", label: "Chat" },
-  { id: "jobs", label: "Jobs" },
-  { id: "settings", label: "Settings" },
-];
+/**
+ * Two tabs, exactly as SPEC §0 says. Settings is the icon button beside them,
+ * not a third tab — it is a place you visit, not a place you work.
+ */
+type MainTab = Extract<Tab, "chat" | "jobs">;
 
-function TabBar() {
+const MAIN_TABS: readonly MainTab[] = ["chat", "jobs"];
+
+function MainTabs({ jobCount }: { jobCount: number | null }) {
   const state = useAppState();
   const dispatch = useAppDispatch();
+  const active: MainTab | null = state.tab === "settings" ? null : state.tab;
 
   return (
-    <nav
-      aria-label="Main sections"
-      className="flex items-center gap-1 border-b border-slate-200 px-4 pt-3"
-    >
-      <span className="mr-4 text-xl font-bold">Cincinnatus</span>
-      {TABS.map((tab) => {
-        const active = state.tab === tab.id;
-        return (
-          <button
-            key={tab.id}
-            type="button"
-            aria-current={active ? "page" : undefined}
-            onClick={() => dispatch({ type: "tab", tab: tab.id })}
-            className={
-              active
-                ? "rounded-t-lg border-b-4 border-blue-700 px-5 py-3 text-lg font-semibold text-blue-800"
-                : "rounded-t-lg border-b-4 border-transparent px-5 py-3 text-lg text-slate-700 hover:bg-slate-100"
-            }
-          >
-            {tab.label}
-          </button>
-        );
-      })}
-    </nav>
+    <TabBar<MainTab>
+      active={active}
+      onChange={(tab) => dispatch({ type: "tab", tab })}
+      // Arrow keys move between tabs, Tab moves into the panel
+      // (guidelines/accessibility.md).
+      onKeyDown={(key) => {
+        if (key !== "ArrowLeft" && key !== "ArrowRight") return;
+        const from = active === null ? 0 : MAIN_TABS.indexOf(active);
+        const step = key === "ArrowRight" ? 1 : -1;
+        const next = MAIN_TABS[(from + step + MAIN_TABS.length) % MAIN_TABS.length]!;
+        dispatch({ type: "tab", tab: next });
+      }}
+      tabs={[
+        { id: "chat", label: "Chat", icon: "forum" },
+        { id: "jobs", label: "Opportunities", icon: "work", count: jobCount },
+      ]}
+    />
   );
 }

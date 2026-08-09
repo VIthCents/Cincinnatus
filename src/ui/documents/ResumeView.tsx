@@ -11,29 +11,27 @@ export function ResumeView({ resume }: { resume: ResumeData }) {
     .join(" · ");
 
   return (
-    <article className="space-y-4 text-base leading-relaxed">
+    <article className="paper">
       <header>
-        <h3 className="text-2xl font-bold">{resume.name}</h3>
-        {contact !== "" && <p className="text-slate-600">{contact}</p>}
+        <h3 className="paper__name">{resume.name}</h3>
+        {contact !== "" && <p className="paper__contact">{contact}</p>}
       </header>
 
       {resume.summary !== null && resume.summary.trim() !== "" && (
         <section>
-          <h4 className="font-bold uppercase tracking-wide text-slate-700">Summary</h4>
+          <h4>Summary</h4>
           <p>{resume.summary}</p>
         </section>
       )}
 
       {resume.clearance !== null && (
-        <p className="font-medium">Security clearance: {resume.clearance}</p>
+        <p className="paper__role">Security clearance: {resume.clearance}</p>
       )}
 
       {resume.experience.length > 0 && (
         <section>
-          <h4 className="font-bold uppercase tracking-wide text-slate-700">
-            Experience
-          </h4>
-          <div className="space-y-3">
+          <h4>Experience</h4>
+          <div className="paper__roles">
             {resume.experience.map((exp, i) => {
               const dates = [formatResumeDate(exp.start), formatResumeDate(exp.end)]
                 .filter((d) => d !== "")
@@ -43,11 +41,11 @@ export function ResumeView({ resume }: { resume: ResumeData }) {
                 .join(" · ");
               return (
                 <div key={`${exp.org}-${exp.title}-${i}`}>
-                  <p className="font-semibold">
+                  <p className="paper__role">
                     {exp.title} — {exp.org}
                   </p>
-                  {meta !== "" && <p className="text-slate-600">{meta}</p>}
-                  <ul className="ml-5 list-disc">
+                  {meta !== "" && <p className="paper__meta">{meta}</p>}
+                  <ul>
                     {exp.bullets.map((bullet, j) => (
                       <li key={j}>{bullet}</li>
                     ))}
@@ -61,9 +59,7 @@ export function ResumeView({ resume }: { resume: ResumeData }) {
 
       {resume.education.length > 0 && (
         <section>
-          <h4 className="font-bold uppercase tracking-wide text-slate-700">
-            Education
-          </h4>
+          <h4>Education</h4>
           <ul>
             {resume.education.map((edu, i) => (
               <li key={i}>
@@ -77,10 +73,8 @@ export function ResumeView({ resume }: { resume: ResumeData }) {
 
       {resume.certifications.length > 0 && (
         <section>
-          <h4 className="font-bold uppercase tracking-wide text-slate-700">
-            Certifications
-          </h4>
-          <ul className="ml-5 list-disc">
+          <h4>Certifications</h4>
+          <ul>
             {resume.certifications.map((cert, i) => (
               <li key={i}>{cert}</li>
             ))}
@@ -90,7 +84,7 @@ export function ResumeView({ resume }: { resume: ResumeData }) {
 
       {resume.skills.length > 0 && (
         <section>
-          <h4 className="font-bold uppercase tracking-wide text-slate-700">Skills</h4>
+          <h4>Skills</h4>
           <p>{resume.skills.join(", ")}</p>
         </section>
       )}

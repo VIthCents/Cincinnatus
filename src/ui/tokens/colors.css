@@ -1,0 +1,170 @@
+/* ── Cincinnatus palette ───────────────────────────────────────────────
+   Six core anchors: INK, STEEL, OLIVE, BONE, BRICK, BRASS.
+   Contrast ratios in comments are measured against --surface-app
+   (#F7F4EE light / #0F1519 dark). AAA = 7:1, AA = 4.5:1.
+   ───────────────────────────────────────────────────────────────────── */
+:root {
+  /* base ramps — never use directly in components; use the aliases below */
+  --ink-900: #161b20;
+  --ink-800: #232a31;
+  --ink-700: #3a444c;
+  --ink-600: #4c5760;
+  --ink-500: #5e6a73;
+  --ink-400: #7c878f;
+  --steel-900: #12303f;
+  --steel-800: #17394f;
+  --steel-700: #1d4a63;
+  --steel-600: #23596f;
+  --steel-500: #2e6b84;
+  --steel-300: #7fb6d0;
+  --steel-200: #a6cfe3;
+  --steel-100: #dee8ed;
+  --steel-50: #edf3f6;
+  --olive-800: #33441a;
+  --olive-700: #3f5220;
+  --olive-600: #4c6327;
+  --olive-500: #5c7730;
+  --olive-300: #a8c275;
+  --olive-100: #e4ead3;
+  --olive-50: #f1f4e7;
+  --bone-50: #fdfbf6;
+  --bone-100: #f7f4ee;
+  --bone-200: #ede8dc;
+  --bone-300: #ddd6c6;
+  --bone-400: #c6bca6;
+  --bone-500: #a69b82;
+  --bone-600: #7e7460;
+  --brick-800: #752417;
+  --brick-700: #8a2b1b;
+  --brick-600: #a03521;
+  --brick-300: #e8a08c;
+  --brick-100: #f6ded6;
+  --brass-800: #66460d;
+  --brass-700: #7a5410;
+  --brass-600: #8e6415;
+  --brass-300: #d9b25c;
+  --brass-100: #f3e6c6;
+  --night-900: #0a0f12;
+  --night-800: #0f1519;
+  --night-700: #161e24;
+  --night-600: #1e282f;
+  --night-500: #2c3a44;
+  --night-400: #5a6e7b;
+
+  /* ── surfaces ── */
+  --surface-app: var(--bone-100); /* warm bone, the page */
+  --surface-card: var(--bone-50); /* raised paper */
+  --surface-sunken: var(--bone-200); /* chat field, wells */
+  --surface-hover: #efeadf;
+  --surface-selected: var(--steel-50);
+  --surface-inverse: var(--ink-900);
+
+  /* ── text ── */
+  --text-strong: var(--ink-900); /* 15.8:1 AAA */
+  --text-body: var(--ink-800); /* 12.9:1 AAA */
+  --text-muted: var(--ink-600); /*  6.7:1 AA  — meta only, never body */
+  --text-inverse: var(--bone-50);
+  --text-on-primary: #ffffff; /*  9.5:1 on --primary AAA */
+  --text-link: var(--steel-700); /*  8.7:1 AAA */
+  --text-link-hover: var(--steel-900);
+
+  /* ── borders ── */
+  --border-hairline: var(--bone-300); /* 1.4:1 — decorative separation */
+  --border-strong: var(--bone-600); /* 4.2:1 — inputs, controls (AA non-text 3:1) */
+  --border-inverse: var(--night-500);
+
+  /* ── primary action (steel) ── */
+  --primary: var(--steel-700);
+  --primary-hover: var(--steel-800);
+  --primary-active: var(--steel-900);
+  --primary-subtle: var(--steel-50);
+  --primary-subtle-border: var(--steel-100);
+  --primary-text: var(--steel-700);
+
+  /* ── accent (olive) — strong match, success, done ── */
+  --accent: var(--olive-600);
+  --accent-subtle: var(--olive-50);
+  --accent-text: var(--olive-700);
+
+  /* ── semantics ── */
+  --success: var(--olive-600);
+  --success-subtle: var(--olive-50);
+  --success-text: var(--olive-700);
+  --caution: var(--brass-600);
+  --caution-subtle: var(--brass-100);
+  --caution-text: var(--brass-800);
+  --danger: var(--brick-700);
+  --danger-hover: var(--brick-800);
+  --danger-subtle: var(--brick-100);
+  --danger-text: var(--brick-800);
+
+  /* ── focus: 2px surface gap + 3px brass. Brass on bone = 3.3:1 ── */
+  --focus-ring: var(--brass-700);
+  --focus-gap: var(--surface-app);
+
+  /* ── match scale — always paired with 1/2/3 chevrons and a word ── */
+  --match-fair: var(--ink-500);
+  --match-good: var(--steel-600);
+  --match-strong: var(--olive-600);
+
+  /* ── elevation (warm-tinted, matte, tight) ── */
+  --shadow-1: 0 1px 2px rgba(38, 32, 22, 0.07);
+  --shadow-2: 0 4px 12px rgba(38, 32, 22, 0.1), 0 1px 2px rgba(38, 32, 22, 0.06);
+  --shadow-3: 0 12px 32px rgba(38, 32, 22, 0.16), 0 2px 6px rgba(38, 32, 22, 0.08);
+}
+
+/* ── DARK: a true night palette. Blue-black surfaces, warm bone type — the
+   same steel/canvas tension as light, not an inverted gray. ── */
+.dark {
+  --surface-app: var(--night-800);
+  --surface-card: var(--night-700);
+  --surface-sunken: var(--night-900);
+  --surface-hover: #1b242b;
+  --surface-selected: #16252f;
+  --surface-inverse: var(--bone-100);
+
+  --text-strong: #efe9dc; /* 15.2:1 AAA */
+  --text-body: #e4ddce; /* 13.6:1 AAA */
+  --text-muted: #ada593; /*  7.5:1 AAA */
+  --text-inverse: var(--ink-900);
+  --text-on-primary: #0a1218; /*  9.9:1 on --primary */
+  --text-link: var(--steel-200); /* 11.1:1 AAA */
+  --text-link-hover: #c8e2f0;
+
+  --border-hairline: var(--night-500);
+  --border-strong: var(--night-400); /* 3.2:1 on card */
+  --border-inverse: var(--bone-400);
+
+  --primary: var(--steel-300);
+  --primary-hover: #9ac7dc;
+  --primary-active: var(--steel-200);
+  --primary-subtle: #16252f;
+  --primary-subtle-border: #254558;
+  --primary-text: var(--steel-200);
+
+  --accent: var(--olive-300);
+  --accent-subtle: #1c2716;
+  --accent-text: var(--olive-300);
+
+  --success: var(--olive-300);
+  --success-subtle: #1c2716;
+  --success-text: var(--olive-300);
+  --caution: var(--brass-300);
+  --caution-subtle: #2a2113;
+  --caution-text: var(--brass-300);
+  --danger: var(--brick-300);
+  --danger-hover: #f2b7a6;
+  --danger-subtle: #2c1712;
+  --danger-text: var(--brick-300);
+
+  --focus-ring: var(--brass-300); /* 9.2:1 on night */
+  --focus-gap: var(--surface-app);
+
+  --match-fair: #ada593;
+  --match-good: var(--steel-300);
+  --match-strong: var(--olive-300);
+
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.45);
+  --shadow-2: 0 4px 12px rgba(0, 0, 0, 0.55), 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-3: 0 14px 36px rgba(0, 0, 0, 0.65), 0 2px 6px rgba(0, 0, 0, 0.45);
+}

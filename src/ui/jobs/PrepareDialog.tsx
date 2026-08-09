@@ -21,10 +21,12 @@ import { FindingsList } from "../documents/FindingsList.tsx";
 import { LetterView } from "../documents/LetterView.tsx";
 import { ResumeView } from "../documents/ResumeView.tsx";
 import { usePrint } from "../documents/print.tsx";
+import { Icon } from "../components/Icon.tsx";
 import {
+  Banner,
   Busy,
+  IconButton,
   ModalShell,
-  Notice,
   PrimaryButton,
   QuietButton,
 } from "../components/ui.tsx";
@@ -97,126 +99,152 @@ export function PrepareDialog({
       onClose={onClose}
       wide
     >
-      <div>
-        <div className="mb-4 flex items-start justify-between gap-4">
+      <div className="review">
+        <div className="review__head">
           <div>
-            <h2 className="text-2xl font-bold">
+            <h2>
               {job.title} — {job.company}
             </h2>
             {federal && (
-              <p className="text-lg text-slate-600">
+              <p className="sub">
                 This is a federal job, so the resume uses the federal format: longer and
                 more detailed on purpose.
               </p>
             )}
           </div>
-          <QuietButton onClick={onClose} aria-label="Close">
-            Close
-          </QuietButton>
+          <span className="cn-wizard__spacer" />
+          <IconButton icon="close" label="Close" onClick={onClose} />
         </div>
 
         {phase === "working" && (
-          <div className="space-y-3 py-10">
-            <Busy label="Writing your resume and cover letter for this job..." />
-            <p className="text-lg text-slate-600">
+          <div className="stack">
+            <Busy label="Writing your resume and cover letter for this job…" />
+            <p className="prose--muted">
               This takes a minute or two, and uses a few cents of your AI credits.
             </p>
           </div>
         )}
 
         {phase === "failed" && (
-          <div className="space-y-4 py-6">
-            <Notice tone="warn">{error}</Notice>
-            <QuietButton onClick={onClose}>Close</QuietButton>
+          <div className="stack">
+            <Banner tone="error" title="Cincinnatus could not write the documents.">
+              {error}
+            </Banner>
+            <div className="row">
+              <QuietButton onClick={onClose}>Close</QuietButton>
+            </div>
           </div>
         )}
 
         {phase === "review" && tailored !== null && letter !== null && (
-          <div className="space-y-5">
+          <>
             {anyHigh ? (
-              <Notice tone="warn">
-                Look at the flagged items below before you use these documents.
-              </Notice>
+              <Banner tone="caution" title="Look at the flagged items first.">
+                Check them before you use these documents.
+              </Banner>
             ) : (
-              <Notice>
-                Both documents checked out: nothing was added that your resume does not
-                back up. Look them over, save them, then hit Apply.
-              </Notice>
+              <Banner tone="success" title="Both documents checked out.">
+                Nothing was added that your resume does not back up. Look them over,
+                save them, then hit Apply.
+              </Banner>
             )}
 
-            {tailored.note !== "" && <p className="text-lg">{tailored.note}</p>}
+            {tailored.note !== "" && <p className="prose">{tailored.note}</p>}
 
-            <div className="grid gap-6 lg:grid-cols-2">
-              <section className="space-y-3 rounded-lg border border-slate-200 p-4">
-                <h3 className="text-xl font-bold">Your resume for this job</h3>
-                <FindingsList findings={tailored.findings} context="derived" />
-                <div className="max-h-96 overflow-y-auto">
-                  <ResumeView resume={tailored.document} />
+            <div className="review__grid">
+              <section className="doc">
+                <div className="doc__head">
+                  <Icon name="description" size={20} />
+                  Your resume for this job
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  <PrimaryButton
-                    onClick={() => {
-                      void saveResumeDocx(tailored.document, {
-                        federal,
-                        suggestedName: `resume-${job.company.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.docx`,
-                      }).then((path) => {
-                        if (path !== null) setSavedNote(`Resume saved to ${path}`);
-                      });
-                    }}
-                  >
-                    Save the resume
-                  </PrimaryButton>
-                  <QuietButton
-                    onClick={() => print(<ResumeView resume={tailored.document} />)}
-                  >
-                    Print
-                  </QuietButton>
+                <div className="doc__body">
+                  <FindingsList findings={tailored.findings} context="derived" />
+                  <ResumeView resume={tailored.document} />
+                  <div className="row">
+                    <PrimaryButton
+                      size="md"
+                      icon="download"
+                      onClick={() => {
+                        void saveResumeDocx(tailored.document, {
+                          federal,
+                          suggestedName: `resume-${job.company.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.docx`,
+                        }).then((path) => {
+                          if (path !== null)
+                            setSavedNote(`Your resume is saved. Look in ${path}.`);
+                        });
+                      }}
+                    >
+                      Save the resume
+                    </PrimaryButton>
+                    <QuietButton
+                      size="md"
+                      icon="print"
+                      onClick={() => print(<ResumeView resume={tailored.document} />)}
+                    >
+                      Print
+                    </QuietButton>
+                  </div>
                 </div>
               </section>
 
-              <section className="space-y-3 rounded-lg border border-slate-200 p-4">
-                <h3 className="text-xl font-bold">Your cover letter</h3>
-                <FindingsList findings={letter.findings} context="derived" />
-                <div className="max-h-96 overflow-y-auto">
-                  <LetterView letter={letter.document} resume={baseResume} />
+              <section className="doc">
+                <div className="doc__head">
+                  <Icon name="description" size={20} />
+                  Your cover letter
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  <PrimaryButton
-                    onClick={() => {
-                      void saveLetterDocx(
-                        letter.document,
-                        baseResume,
-                        job.company,
-                      ).then((path) => {
-                        if (path !== null)
-                          setSavedNote(`Cover letter saved to ${path}`);
-                      });
-                    }}
-                  >
-                    Save the letter
-                  </PrimaryButton>
-                  <QuietButton
-                    onClick={() =>
-                      print(<LetterView letter={letter.document} resume={baseResume} />)
-                    }
-                  >
-                    Print
-                  </QuietButton>
+                <div className="doc__body">
+                  <FindingsList findings={letter.findings} context="derived" />
+                  <LetterView letter={letter.document} resume={baseResume} />
+                  <div className="row">
+                    <PrimaryButton
+                      size="md"
+                      icon="download"
+                      onClick={() => {
+                        void saveLetterDocx(
+                          letter.document,
+                          baseResume,
+                          job.company,
+                        ).then((path) => {
+                          if (path !== null)
+                            setSavedNote(
+                              `Your cover letter is saved. Look in ${path}.`,
+                            );
+                        });
+                      }}
+                    >
+                      Save the letter
+                    </PrimaryButton>
+                    <QuietButton
+                      size="md"
+                      icon="print"
+                      onClick={() =>
+                        print(
+                          <LetterView letter={letter.document} resume={baseResume} />,
+                        )
+                      }
+                    >
+                      Print
+                    </QuietButton>
+                  </div>
                 </div>
               </section>
             </div>
 
-            {savedNote !== null && <Notice>{savedNote}</Notice>}
+            {savedNote !== null && <Banner tone="success">{savedNote}</Banner>}
 
-            <div className="flex flex-wrap items-center gap-3 border-t border-slate-200 pt-4">
-              <PrimaryButton onClick={() => void openUrl(job.url)}>
+            {/* The human applies. This is constraint 2, drawn. */}
+            <div className="row">
+              <PrimaryButton
+                iconEnd="open_in_new"
+                onClick={() => void openUrl(job.url)}
+              >
                 Apply — opens the job in your browser
               </PrimaryButton>
-              <p className="text-base text-slate-600">
+              <p className="prose--muted">
                 You do the applying. Cincinnatus never sends anything for you.
               </p>
             </div>
-          </div>
+          </>
         )}
       </div>
     </ModalShell>
