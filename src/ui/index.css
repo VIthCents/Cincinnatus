@@ -17,3 +17,20 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Printing: only the document in #print-host reaches the page. The system
+   print dialog's "Save as PDF" is how the app exports PDFs. */
+#print-host {
+  display: none;
+}
+
+@media print {
+  #root {
+    display: none;
+  }
+  #print-host {
+    display: block;
+    color: #000;
+    font-size: 11pt;
+  }
+}

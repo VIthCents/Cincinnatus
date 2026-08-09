@@ -8,6 +8,12 @@ const host = process.env.TAURI_DEV_HOST;
 export default defineConfig({
   plugins: [react(), tailwindcss()],
 
+  optimizeDeps: {
+    // esbuild's prebundle mangles this package's dynamic wasm/worker imports;
+    // let Vite serve it as-is.
+    exclude: ["@huggingface/transformers"],
+  },
+
   // Vite options tailored for Tauri development, applied in `tauri dev` / `tauri build`.
   //
   // 1. prevent Vite from obscuring rust errors

@@ -7,6 +7,7 @@ coverage
 src-tauri/target
 src-tauri/gen
 pnpm-lock.yaml
+public/wasm
 
 # Recorded API responses. These are verbatim bytes from a real endpoint and
 # must not be reformatted, or they stop being evidence of what the API returned.

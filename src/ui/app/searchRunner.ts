@@ -1,0 +1,59 @@
+import type { Dispatch } from "react";
+import * as repo from "../../core/db/repo.ts";
+import type { ProgressEvent } from "../../core/ports.ts";
+import { db, runSearch } from "./services.ts";
+import type { Action } from "./state.tsx";
+
+/**
+ * The one way a search runs outside the wizard — used by the Jobs tab button,
+ * the tray's "Search for jobs now", the scheduler tick, and the chat chip.
+ * Serialized: a second request while one is running is ignored rather than
+ * queued, because the second run would just re-fetch the same boards.
+ */
+
+let searchInFlight = false;
+
+export async function runSearchNow(
+  dispatch: Dispatch<Action>,
+  options: { notify?: (newJobs: number) => void } = {},
+): Promise<void> {
+  if (searchInFlight) return;
+
+  const profile = await repo.getStoredProfile(db);
+  if (profile === null) {
+    dispatch({
+      type: "search_failed",
+      message: "Finish the setup first, then I can search.",
+    });
+    return;
+  }
+
+  searchInFlight = true;
+  dispatch({ type: "search_start" });
+
+  const report = (event: ProgressEvent): void => {
+    if (event.kind === "source_start") {
+      dispatch({ type: "search_status", message: `Checking ${event.label}...` });
+    } else if (event.kind === "embed_progress") {
+      dispatch({
+        type: "search_status",
+        message: `Matching jobs to you: ${event.done} of ${event.total}`,
+      });
+    } else if (event.kind === "note") {
+      dispatch({ type: "search_status", message: event.message });
+    }
+  };
+
+  try {
+    const { report: runReport, ranked } = await runSearch(profile, report);
+    dispatch({ type: "search_done", ranked: [...ranked], report: runReport });
+    options.notify?.(runReport.jobsNew);
+  } catch (err) {
+    dispatch({
+      type: "search_failed",
+      message: `The search hit a problem: ${err instanceof Error ? err.message : String(err)}. Try again in a bit.`,
+    });
+  } finally {
+    searchInFlight = false;
+  }
+}

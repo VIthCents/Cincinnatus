@@ -173,6 +173,17 @@ export async function listRankableJobs(db: Db): Promise<Job[]> {
   return rows.map(rowToJob);
 }
 
+/**
+ * jobId → embed_hash for every rankable job that has one. What lets the app
+ * re-rank on startup from stored vectors without running a search first.
+ */
+export async function listEmbedHashes(db: Db): Promise<Map<string, string>> {
+  const rows = await db.all<{ id: string; embed_hash: string }>(
+    "SELECT id, embed_hash FROM jobs WHERE canonical_id IS NULL AND embed_hash IS NOT NULL",
+  );
+  return new Map(rows.map((r) => [r.id, r.embed_hash]));
+}
+
 export async function setCanonical(
   db: Db,
   pairs: readonly (readonly [duplicateId: string, canonicalId: string])[],
@@ -350,6 +361,204 @@ export async function listWatchlist(db: Db): Promise<WatchlistEntry[]> {
     source: r.source as WatchlistEntry["source"],
     sector: r.sector,
     note: r.note,
+  }));
+}
+
+// -----------------------------------------------------------------------------
+// Settings
+// -----------------------------------------------------------------------------
+
+export async function getSetting(db: Db, key: string): Promise<string | null> {
+  const rows = await db.all<{ value: string }>(
+    "SELECT value FROM settings WHERE key = ?",
+    [key],
+  );
+  return rows[0]?.value ?? null;
+}
+
+export async function setSetting(db: Db, key: string, value: string): Promise<void> {
+  await db.run(
+    `INSERT INTO settings (key, value) VALUES (?, ?)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+    [key, value],
+  );
+}
+
+export async function getStoredProfile(db: Db): Promise<Profile | null> {
+  const rows = await db.all<{ json: string; embedding: string | null }>(
+    "SELECT json, embedding FROM profile WHERE id = 1",
+  );
+  const row = rows[0];
+  return row === undefined ? null : (JSON.parse(row.json) as Profile);
+}
+
+export async function getStoredProfileEmbedding(
+  db: Db,
+  modelId: string,
+): Promise<string | null> {
+  const rows = await db.all<{ embedding: string | null; embed_model: string | null }>(
+    "SELECT embedding, embed_model FROM profile WHERE id = 1",
+  );
+  const row = rows[0];
+  if (row === undefined || row.embedding === null) return null;
+  // A vector from a different model or quantization is not comparable.
+  return row.embed_model === modelId ? row.embedding : null;
+}
+
+// -----------------------------------------------------------------------------
+// Feedback
+// -----------------------------------------------------------------------------
+
+export type FeedbackVerdict = "up" | "down" | "applied" | "hidden";
+
+export async function saveFeedback(
+  db: Db,
+  jobId: string,
+  verdict: FeedbackVerdict,
+  now: number,
+): Promise<void> {
+  await db.run(
+    `INSERT INTO feedback (job_id, verdict, ts) VALUES (?, ?, ?)
+     ON CONFLICT(job_id, verdict) DO UPDATE SET ts = excluded.ts`,
+    [jobId, verdict, now],
+  );
+}
+
+export async function removeFeedback(
+  db: Db,
+  jobId: string,
+  verdict: FeedbackVerdict,
+): Promise<void> {
+  await db.run("DELETE FROM feedback WHERE job_id = ? AND verdict = ?", [
+    jobId,
+    verdict,
+  ]);
+}
+
+export async function listFeedback(
+  db: Db,
+  verdict: FeedbackVerdict,
+): Promise<ReadonlySet<string>> {
+  const rows = await db.all<{ job_id: string }>(
+    "SELECT job_id FROM feedback WHERE verdict = ?",
+    [verdict],
+  );
+  return new Set(rows.map((r) => r.job_id));
+}
+
+// -----------------------------------------------------------------------------
+// Documents
+// -----------------------------------------------------------------------------
+
+export type DocumentKind =
+  "base_resume" | "final_resume" | "tailored_resume" | "cover_letter";
+
+export interface StoredDocument {
+  readonly id: string;
+  readonly kind: DocumentKind;
+  readonly jobId: string | null;
+  readonly version: number;
+  /** JSON — ResumeData for resume kinds, CoverLetter for letters. */
+  readonly content: string;
+  readonly createdAt: number;
+}
+
+export async function saveDocument(
+  db: Db,
+  document: {
+    readonly id: string;
+    readonly kind: DocumentKind;
+    readonly jobId: string | null;
+    readonly content: string;
+  },
+  now: number,
+): Promise<void> {
+  const rows = await db.all<{ v: number | null }>(
+    "SELECT MAX(version) AS v FROM documents WHERE kind = ? AND job_id IS ?",
+    [document.kind, document.jobId],
+  );
+  const version = (rows[0]?.v ?? 0) + 1;
+  await db.run(
+    `INSERT INTO documents (id, kind, job_id, version, content, export_path, created_at)
+     VALUES (?, ?, ?, ?, ?, NULL, ?)`,
+    [document.id, document.kind, document.jobId, version, document.content, now],
+  );
+}
+
+/** The newest document of a kind (optionally for one job). */
+export async function getLatestDocument(
+  db: Db,
+  kind: DocumentKind,
+  jobId: string | null = null,
+): Promise<StoredDocument | null> {
+  const rows = await db.all<{
+    id: string;
+    kind: string;
+    job_id: string | null;
+    version: number;
+    content: string;
+    created_at: number;
+  }>(
+    `SELECT id, kind, job_id, version, content, created_at FROM documents
+      WHERE kind = ? AND job_id IS ?
+      ORDER BY version DESC LIMIT 1`,
+    [kind, jobId],
+  );
+  const row = rows[0];
+  if (row === undefined) return null;
+  return {
+    id: row.id,
+    kind: row.kind as DocumentKind,
+    jobId: row.job_id,
+    version: row.version,
+    content: row.content,
+    createdAt: row.created_at,
+  };
+}
+
+// -----------------------------------------------------------------------------
+// Chat history
+// -----------------------------------------------------------------------------
+
+export interface StoredChatMessage {
+  readonly id: string;
+  readonly role: "user" | "assistant";
+  readonly content: string;
+  readonly ts: number;
+}
+
+export async function saveChatMessage(
+  db: Db,
+  message: StoredChatMessage,
+  relatedDocumentId: string | null = null,
+): Promise<void> {
+  await db.run(
+    `INSERT INTO chat_messages (id, role, content, ts, related_document_id)
+     VALUES (?, ?, ?, ?, ?)`,
+    [message.id, message.role, message.content, message.ts, relatedDocumentId],
+  );
+}
+
+export async function listRecentChatMessages(
+  db: Db,
+  limit: number,
+): Promise<StoredChatMessage[]> {
+  const rows = await db.all<{
+    id: string;
+    role: string;
+    content: string;
+    ts: number;
+  }>(
+    `SELECT id, role, content, ts FROM chat_messages
+      WHERE role IN ('user', 'assistant')
+      ORDER BY ts DESC, id DESC LIMIT ?`,
+    [limit],
+  );
+  return rows.reverse().map((r) => ({
+    id: r.id,
+    role: r.role as "user" | "assistant",
+    content: r.content,
+    ts: r.ts,
   }));
 }
 

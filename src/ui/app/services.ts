@@ -1,0 +1,210 @@
+import { TauriDb } from "../../tauri/db.ts";
+import { tauriHttp } from "../../tauri/http.ts";
+import { tauriClock, tauriHasher } from "../../tauri/clock.ts";
+import { createTauriEmbedder } from "../../tauri/embedder.ts";
+import { createTauriLlm } from "../../tauri/llm.ts";
+import {
+  SECRET_ANTHROPIC_KEY,
+  SECRET_USAJOBS_EMAIL,
+  SECRET_USAJOBS_KEY,
+  getSecret,
+} from "../../tauri/secrets.ts";
+
+import type { Embedder, Llm, Reporter } from "../../core/ports.ts";
+import type { Profile, WatchlistEntry } from "../../core/types.ts";
+import { migrate } from "../../core/db/migrations.ts";
+import * as repo from "../../core/db/repo.ts";
+import { runPipeline, type RunResult } from "../../core/pipeline/run.ts";
+import { loadRankedFromDb } from "../../core/pipeline/loadRanked.ts";
+import { buildSearchTerms } from "../../core/pipeline/queries.ts";
+import { createGreenhouseSource } from "../../core/sources/greenhouse.ts";
+import { createUsaJobsSource } from "../../core/sources/usajobs.ts";
+import type { Source } from "../../core/sources/source.ts";
+import { markRunNow } from "../../core/app/schedule.ts";
+import { USAJOBS_DEFAULT_WINDOW_DAYS } from "../../core/config.ts";
+import { MODEL_ID } from "../../tauri/embedder.ts";
+
+import starterWatchlist from "../../../data/starter-watchlist.json";
+
+/**
+ * The webview's composition root: one Db, one lazy embedder, sources built
+ * from the watchlist table plus whichever keys the user has connected. The
+ * same runPipeline the harness uses, wired to the Tauri adapters.
+ */
+
+export const db = new TauriDb();
+
+let embedderPromise: Promise<Embedder> | null = null;
+
+/**
+ * The ~23 MB model loads once, on first search, not at app start.
+ *
+ * A FAILED load is not cached: caching the rejected promise would make every
+ * "Try again" fail with the first attempt's error until the app restarts —
+ * observed live when the wasm runtime was missing.
+ */
+export function getEmbedder(): Promise<Embedder> {
+  embedderPromise ??= createTauriEmbedder().catch((err: unknown) => {
+    embedderPromise = null;
+    throw err;
+  });
+  return embedderPromise;
+}
+
+/** Null when no key is connected — callers show the "connect AI" path. */
+export async function getLlm(): Promise<Llm | null> {
+  const key = await getSecret(SECRET_ANTHROPIC_KEY);
+  return key === null ? null : createTauriLlm(key);
+}
+
+export async function hasAnthropicKey(): Promise<boolean> {
+  return (await getSecret(SECRET_ANTHROPIC_KEY)) !== null;
+}
+
+export async function hasUsaJobsKey(): Promise<boolean> {
+  return (
+    (await getSecret(SECRET_USAJOBS_KEY)) !== null &&
+    (await getSecret(SECRET_USAJOBS_EMAIL)) !== null
+  );
+}
+
+interface StarterWatchlistFile {
+  boards: {
+    ats: WatchlistEntry["ats"];
+    slug: string;
+    company_label: string;
+    board_name?: string;
+    source: WatchlistEntry["source"];
+    sector?: string;
+    note?: string;
+  }[];
+}
+
+/** Migrate and make sure the starter boards are in the watchlist table. */
+export async function ensureDbReady(): Promise<void> {
+  const now = tauriClock.now();
+  await migrate(db, now);
+
+  const existing = await repo.listWatchlist(db);
+  if (existing.length === 0) {
+    const file = starterWatchlist as StarterWatchlistFile;
+    await repo.seedWatchlist(
+      db,
+      file.boards.map((b) => ({
+        ats: b.ats,
+        slug: b.slug,
+        companyLabel: b.company_label,
+        boardName: b.board_name ?? null,
+        source: b.source,
+        sector: b.sector ?? null,
+        note: b.note ?? null,
+      })),
+      now,
+    );
+  }
+}
+
+/** Assemble sources exactly the way the harness does. */
+async function buildSources(profile: Profile): Promise<Source[]> {
+  const watchlist = await repo.listWatchlist(db);
+  const sources: Source[] = watchlist
+    .filter((entry) => entry.ats === "greenhouse")
+    .map((entry) => createGreenhouseSource(entry.slug, entry.companyLabel));
+
+  const key = await getSecret(SECRET_USAJOBS_KEY);
+  const email = await getSecret(SECRET_USAJOBS_EMAIL);
+  if (key !== null && email !== null) {
+    const terms = buildSearchTerms(profile);
+    sources.push(
+      createUsaJobsSource({
+        auth: { apiKey: key, userAgentEmail: email },
+        keywords: terms.titles,
+        windowDays: USAJOBS_DEFAULT_WINDOW_DAYS,
+      }),
+    );
+  }
+  return sources;
+}
+
+export async function runSearch(
+  profile: Profile,
+  reporter: Reporter,
+): Promise<RunResult> {
+  const embedder = await getEmbedder();
+  const sources = await buildSources(profile);
+
+  const result = await runPipeline({
+    db,
+    http: tauriHttp,
+    clock: tauriClock,
+    hasher: tauriHasher,
+    embedder,
+    reporter,
+    profile,
+    sources,
+    maxEmbed: null, // the product default: embed everything, show progress
+  });
+
+  await markRunNow(db, tauriClock.now());
+  return result;
+}
+
+/** The last known ranking, straight from the database — instant, no network. */
+export function loadLastRanking(): ReturnType<typeof loadRankedFromDb> {
+  return loadRankedFromDb(db, MODEL_ID, tauriClock.now());
+}
+
+// -----------------------------------------------------------------------------
+// Key validation (the wizard's live checks with the green tick)
+// -----------------------------------------------------------------------------
+
+/** Costs a fraction of a cent when it works — one tiny fast-model request. */
+export async function validateAnthropicKey(
+  key: string,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  const { createTauriLlm, llmErrorMessage } = await import("../../tauri/llm.ts");
+  try {
+    await createTauriLlm(key).complete({
+      model: "fast",
+      system: "Answer with the single word OK.",
+      messages: [{ role: "user", content: "OK?" }],
+      maxTokens: 4,
+    });
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, message: llmErrorMessage(err) };
+  }
+}
+
+export async function validateUsaJobsKey(
+  key: string,
+  email: string,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  try {
+    const response = await tauriHttp.get({
+      url: "https://data.usajobs.gov/api/search?ResultsPerPage=1&Keyword=logistics",
+      headers: {
+        "authorization-key": key,
+        "user-agent": email,
+        host: "data.usajobs.gov",
+      },
+    });
+    if (response.status === 200) return { ok: true };
+    if (response.status === 401 || response.status === 403) {
+      return {
+        ok: false,
+        message:
+          "USAJobs did not accept the key. Check that the key is complete and the email matches the one you signed up with.",
+      };
+    }
+    return {
+      ok: false,
+      message: `USAJobs answered in an unexpected way (code ${response.status}). Try again in a minute.`,
+    };
+  } catch {
+    return {
+      ok: false,
+      message: "Could not reach USAJobs. Check your internet connection and try again.",
+    };
+  }
+}

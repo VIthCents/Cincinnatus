@@ -41,6 +41,9 @@ dist-ssr
 # reinstalls do not force a re-download.
 .models/
 
+# ONNX wasm runtime, copied from node_modules by scripts/copy-wasm.ts.
+public/wasm/
+
 # Test + coverage output
 coverage/
 

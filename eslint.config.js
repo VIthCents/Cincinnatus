@@ -40,6 +40,8 @@ export default tseslint.config(
       ".data/**",
       ".models/**",
       ".tsbuild/**",
+      // Vendored ONNX runtime, copied by scripts/copy-wasm.ts.
+      "public/wasm/**",
     ],
   },
 
@@ -151,16 +153,16 @@ export default tseslint.config(
             "src/core must not read the clock. Use the Clock port, so `now` is read exactly once per run and two jobs cannot land on opposite sides of a day boundary because one was processed later.",
         },
       ],
-      // Bans reading the clock without banning Date outright. `Date.parse` and
-      // `Date.UTC` are pure string/number maths and are exactly what the source
-      // clients need to turn a published-at string into epoch ms; it is
-      // `new Date()` and `Date.now()` that make a run non-reproducible.
+      // Bans reading the clock without banning Date outright. `Date.parse`,
+      // `Date.UTC`, and `new Date(epochMs)` are pure conversions and fine; it
+      // is the ZERO-ARGUMENT `new Date()` (and `Date.now`, banned above) that
+      // reads the wall clock and makes a run non-reproducible.
       "no-restricted-syntax": [
         "error",
         {
-          selector: "NewExpression[callee.name='Date']",
+          selector: "NewExpression[callee.name='Date'][arguments.length=0]",
           message:
-            "src/core must not construct Dates. Use the Clock port for the current time, and Date.parse(...) for turning a source's timestamp string into epoch milliseconds.",
+            "src/core must not read the clock. Use the Clock port for the current time; new Date(epochMs) for converting a known instant is fine.",
         },
       ],
     },
