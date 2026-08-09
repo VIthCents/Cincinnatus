@@ -32,7 +32,13 @@ export async function chatTurn(
       ? CHAT_SYSTEM
       : `${CHAT_SYSTEM}\n\nThe veteran's current resume, for your reference (never invent beyond it):\n${JSON.stringify(input.resume)}`;
 
-  const history = input.history.slice(-HISTORY_LIMIT);
+  // The API requires the first message to be from the user, and the visible
+  // chat legitimately starts with assistant text (a chip's critique, the
+  // no-key explainer). Drop leading assistant turns after windowing — a
+  // greeting the model itself wrote carries no context it needs back.
+  const windowed = input.history.slice(-HISTORY_LIMIT);
+  const firstUser = windowed.findIndex((m) => m.role === "user");
+  const history = firstUser === -1 ? [] : windowed.slice(firstUser);
 
   const response = await llm.complete({
     model: "fast",

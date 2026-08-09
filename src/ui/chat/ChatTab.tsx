@@ -8,7 +8,7 @@ import { reviseResume } from "../../core/documents/revise.ts";
 import * as repo from "../../core/db/repo.ts";
 
 import { llmErrorMessage } from "../../tauri/llm.ts";
-import { tauriClock } from "../../tauri/clock.ts";
+import { tauriClock, tauriHasher } from "../../tauri/clock.ts";
 
 import { db, getLlm } from "../app/services.ts";
 import { runSearchNow } from "../app/searchRunner.ts";
@@ -31,6 +31,21 @@ function entryId(): string {
   return `chat-${Date.now()}-${nextId}`;
 }
 
+/** The critique as plain text, so the persisted message is self-sufficient. */
+function critiqueToText(critique: Critique): string {
+  const lines: string[] = [critique.summary, "", "What is working:"];
+  for (const s of critique.strengths) lines.push(`• ${s}`);
+  lines.push("", "What is holding it back:");
+  for (const g of critique.gaps) lines.push(`• ${g}`);
+  lines.push("", "What to fix, one at a time:");
+  critique.fixes.forEach((fix, i) => {
+    lines.push(`${i + 1}. ${fix.what}`);
+    lines.push(`   Why: ${fix.why}`);
+    lines.push(`   How: ${fix.how}`);
+  });
+  return lines.join("\n");
+}
+
 export function ChatTab() {
   const state = useAppState();
   const dispatch = useAppDispatch();
@@ -43,20 +58,26 @@ export function ChatTab() {
     endRef.current?.scrollIntoView({ behavior: "instant", block: "end" });
   }, [state.chat.length, state.chatBusy]);
 
-  function add(entry: ChatEntry, persist = true) {
+  function add(entry: ChatEntry, relatedDocumentId: string | null = null) {
     dispatch({ type: "chat_add", entry });
-    if (persist) {
-      void repo.saveChatMessage(db, {
+    void repo.saveChatMessage(
+      db,
+      {
         id: entry.id,
         role: entry.role,
         content: entry.content,
         ts: tauriClock.now(),
-      });
-    }
+      },
+      relatedDocumentId,
+    );
   }
 
-  function say(content: string, card: ChatEntry["card"] = null) {
-    add({ id: entryId(), role: "assistant", content, card });
+  function say(
+    content: string,
+    card: ChatEntry["card"] = null,
+    relatedDocumentId: string | null = null,
+  ) {
+    add({ id: entryId(), role: "assistant", content, card }, relatedDocumentId);
   }
 
   async function needLlm() {
@@ -104,7 +125,9 @@ export function ChatTab() {
           : ((await repo.getSetting(db, "base_resume_raw_text")) ??
             JSON.stringify(source.resume, null, 2));
       const critique = await analyzeResume(llm, rawText);
-      say("Here's my honest read of your resume:", {
+      // The persisted content is the full critique as plain text, so the
+      // message still reads complete after a restart (cards are not stored).
+      say(critiqueToText(critique), {
         kind: "critique",
         critiqueJson: JSON.stringify(critique),
       });
@@ -125,12 +148,28 @@ export function ChatTab() {
     dispatch({ type: "chat_busy", busy: true });
     try {
       const result = await reviseResume(llm, state.resume, instruction);
-      say(result.note, {
-        kind: "resume",
-        resumeJson: JSON.stringify(result.document),
-        note: result.note,
-        findingsJson: JSON.stringify(result.findings),
-      });
+      // Persist the revised resume as a document BEFORE showing the card, and
+      // link the message to it — so closing the app before clicking "Use this
+      // as my resume" loses nothing: boot() rebuilds the card from this row.
+      const resumeJson = JSON.stringify(result.document);
+      const documentId = tauriHasher.sha256Hex(
+        `final_resume:${tauriClock.now()}:${resumeJson.length}`,
+      );
+      await repo.saveDocument(
+        db,
+        { id: documentId, kind: "final_resume", jobId: null, content: resumeJson },
+        tauriClock.now(),
+      );
+      say(
+        result.note,
+        {
+          kind: "resume",
+          resumeJson,
+          note: result.note,
+          findingsJson: JSON.stringify(result.findings),
+        },
+        documentId,
+      );
     } catch (err) {
       say(llmErrorMessage(err));
     } finally {
@@ -248,6 +287,12 @@ function ChatBubble({
   onPrint: (node: React.ReactNode) => void;
 }) {
   const isUser = entry.role === "user";
+  // When the pretty critique card is live, don't ALSO show its plain-text twin
+  // (the text form exists so the persisted message survives restarts).
+  const displayContent =
+    entry.card?.kind === "critique"
+      ? "Here's my honest read of your resume:"
+      : entry.content;
   return (
     <div className={isUser ? "flex justify-end" : "flex justify-start"}>
       <div
@@ -257,7 +302,7 @@ function ChatBubble({
             : "max-w-[85%] rounded-2xl bg-slate-100 px-4 py-3 text-lg"
         }
       >
-        <p className="whitespace-pre-wrap">{entry.content}</p>
+        <p className="whitespace-pre-wrap">{displayContent}</p>
         {entry.card?.kind === "critique" && (
           <CritiqueCard critique={JSON.parse(entry.card.critiqueJson) as Critique} />
         )}

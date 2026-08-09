@@ -46,7 +46,12 @@ export async function runSearchNow(
 
   try {
     const { report: runReport, ranked } = await runSearch(profile, report);
-    dispatch({ type: "search_done", ranked: [...ranked], report: runReport });
+    dispatch({
+      type: "search_done",
+      ranked: [...ranked],
+      report: runReport,
+      warning: sourceTroubleWords(runReport),
+    });
     options.notify?.(runReport.jobsNew);
   } catch (err) {
     dispatch({
@@ -56,4 +61,22 @@ export async function runSearchNow(
   } finally {
     searchInFlight = false;
   }
+}
+
+/**
+ * A search where some (or all) job sites failed must say so — a quietly
+ * shorter list looks identical to a healthy one, and a fully failed search
+ * would otherwise present as "no jobs match you".
+ */
+export function sourceTroubleWords(report: {
+  readonly sources: readonly { readonly error: string | null }[];
+}): string {
+  const failed = report.sources.filter((s) => s.error !== null).length;
+  const total = report.sources.length;
+  if (failed === 0) return "";
+  if (failed === total) {
+    return "I could not reach any of the job sites this time. Check your internet connection and try again in a few minutes.";
+  }
+  const plural = failed === 1 ? "1 job site" : `${failed} job sites`;
+  return `${plural} could not be checked this time. The jobs below came from the others — search again later to catch up.`;
 }

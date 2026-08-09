@@ -8,14 +8,10 @@ import type {
 } from "../../core/documents/types.ts";
 import { tailorResume } from "../../core/documents/tailor.ts";
 import { writeCoverLetter } from "../../core/documents/coverletter.ts";
-import { estimateCostUsd } from "../../core/config.ts";
-import { recordSpend } from "../../core/app/spend.ts";
 
 import { llmErrorMessage } from "../../tauri/llm.ts";
-import { tauriClock } from "../../tauri/clock.ts";
 
-import { db, getLlm } from "../app/services.ts";
-import type { Llm, LlmRequest, LlmResponse } from "../../core/ports.ts";
+import { getLlm } from "../app/services.ts";
 import {
   saveLetterDocx,
   saveResumeDocx,
@@ -25,7 +21,13 @@ import { FindingsList } from "../documents/FindingsList.tsx";
 import { LetterView } from "../documents/LetterView.tsx";
 import { ResumeView } from "../documents/ResumeView.tsx";
 import { usePrint } from "../documents/print.tsx";
-import { Busy, Notice, PrimaryButton, QuietButton } from "../components/ui.tsx";
+import {
+  Busy,
+  ModalShell,
+  Notice,
+  PrimaryButton,
+  QuietButton,
+} from "../components/ui.tsx";
 
 /**
  * "Prepare my application" (SPEC §8): tailored resume + cover letter,
@@ -33,22 +35,6 @@ import { Busy, Notice, PrimaryButton, QuietButton } from "../components/ui.tsx";
  * Save / Print / Apply. Documents are generated on demand only — never
  * speculatively (SPEC §7: that burns the user's money).
  */
-
-/** Wrap an Llm so this dialog's calls are added to the monthly spend line. */
-function withSpendTracking(inner: Llm): Llm {
-  return {
-    async complete(req: LlmRequest): Promise<LlmResponse> {
-      const response = await inner.complete(req);
-      const cost = estimateCostUsd(
-        response.modelId,
-        response.inputTokens,
-        response.outputTokens,
-      );
-      void recordSpend(db, tauriClock.now(), cost);
-      return response;
-    },
-  };
-}
 
 export function PrepareDialog({
   job,
@@ -74,15 +60,15 @@ export function PrepareDialog({
     startedRef.current = true;
 
     void (async () => {
-      const rawLlm = await getLlm();
-      if (rawLlm === null) {
+      // getLlm() already counts usage toward the monthly spend estimate.
+      const llm = await getLlm();
+      if (llm === null) {
         setError(
           "Making documents needs the AI helper. Add your AI access key in Settings first.",
         );
         setPhase("failed");
         return;
       }
-      const llm = withSpendTracking(rawLlm);
       try {
         const tailorResult = await tailorResume(llm, baseResume, job);
         setTailored(tailorResult);
@@ -106,13 +92,12 @@ export function PrepareDialog({
     (letter?.findings.some((f) => f.severity === "high") ?? false);
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label={`Prepare application for ${job.title} at ${job.company}`}
-      className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/60 p-4"
+    <ModalShell
+      label={`Prepare application for ${job.title} at ${job.company}`}
+      onClose={onClose}
+      wide
     >
-      <div className="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-xl bg-white p-6 shadow-xl">
+      <div>
         <div className="mb-4 flex items-start justify-between gap-4">
           <div>
             <h2 className="text-2xl font-bold">
@@ -234,6 +219,6 @@ export function PrepareDialog({
           </div>
         )}
       </div>
-    </div>
+    </ModalShell>
   );
 }

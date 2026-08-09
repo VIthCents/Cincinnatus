@@ -525,6 +525,8 @@ export interface StoredChatMessage {
   readonly role: "user" | "assistant";
   readonly content: string;
   readonly ts: number;
+  /** Document this message carries (e.g. a revised resume card). */
+  readonly relatedDocumentId?: string | null;
 }
 
 export async function saveChatMessage(
@@ -548,8 +550,9 @@ export async function listRecentChatMessages(
     role: string;
     content: string;
     ts: number;
+    related_document_id: string | null;
   }>(
-    `SELECT id, role, content, ts FROM chat_messages
+    `SELECT id, role, content, ts, related_document_id FROM chat_messages
       WHERE role IN ('user', 'assistant')
       ORDER BY ts DESC, id DESC LIMIT ?`,
     [limit],
@@ -559,7 +562,35 @@ export async function listRecentChatMessages(
     role: r.role as "user" | "assistant",
     content: r.content,
     ts: r.ts,
+    relatedDocumentId: r.related_document_id,
   }));
+}
+
+export async function getDocumentById(
+  db: Db,
+  id: string,
+): Promise<StoredDocument | null> {
+  const rows = await db.all<{
+    id: string;
+    kind: string;
+    job_id: string | null;
+    version: number;
+    content: string;
+    created_at: number;
+  }>(
+    "SELECT id, kind, job_id, version, content, created_at FROM documents WHERE id = ?",
+    [id],
+  );
+  const row = rows[0];
+  if (row === undefined) return null;
+  return {
+    id: row.id,
+    kind: row.kind as DocumentKind,
+    jobId: row.job_id,
+    version: row.version,
+    content: row.content,
+    createdAt: row.created_at,
+  };
 }
 
 // -----------------------------------------------------------------------------

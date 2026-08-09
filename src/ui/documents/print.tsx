@@ -32,8 +32,28 @@ export function PrintProvider({ children }: { children: ReactNode }) {
     if (content === null) return;
     // Let the print host paint before the dialog freezes the page.
     const frame = requestAnimationFrame(() => {
-      window.print();
-      setContent(null);
+      void (async () => {
+        try {
+          // Prefer Tauri's native print when this API version exposes it — on
+          // macOS, WKWebView ignores the web API window.print(), so the native
+          // call is the one that works there. Feature-detected because the JS
+          // binding is newer than the Rust command.
+          const { getCurrentWebviewWindow } =
+            await import("@tauri-apps/api/webviewWindow");
+          const webview = getCurrentWebviewWindow() as unknown as {
+            print?: () => Promise<void>;
+          };
+          if (typeof webview.print === "function") {
+            await webview.print();
+          } else {
+            window.print();
+          }
+        } catch {
+          window.print();
+        } finally {
+          setContent(null);
+        }
+      })();
     });
     return () => cancelAnimationFrame(frame);
   }, [content]);

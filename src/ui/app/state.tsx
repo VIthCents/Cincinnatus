@@ -3,11 +3,13 @@ import {
   useContext,
   useEffect,
   useReducer,
+  useState,
   type Dispatch,
   type ReactNode,
 } from "react";
 import type { Profile, RankedJob, RunReport } from "../../core/types.ts";
 import type { ResumeData } from "../../core/documents/types.ts";
+import { verifyResume } from "../../core/documents/verify.ts";
 import * as repo from "../../core/db/repo.ts";
 import {
   db,
@@ -38,6 +40,8 @@ export interface ChatEntry {
 
 export interface AppState {
   readonly booted: boolean;
+  /** Plain-words message when startup failed; "" while fine. */
+  readonly bootError: string;
   readonly needsWizard: boolean;
   readonly tab: Tab;
   readonly resume: ResumeData | null;
@@ -48,12 +52,15 @@ export interface AppState {
   readonly searching: boolean;
   readonly searchStatus: string;
   readonly hidden: ReadonlySet<string>;
+  /** The veteran's saved 👍/👎 per job, restored across launches. */
+  readonly feedback: ReadonlyMap<string, "up" | "down">;
   readonly chat: readonly ChatEntry[];
   readonly chatBusy: boolean;
 }
 
 const initialState: AppState = {
   booted: false,
+  bootError: "",
   needsWizard: false,
   tab: "chat",
   resume: null,
@@ -64,6 +71,7 @@ const initialState: AppState = {
   searching: false,
   searchStatus: "",
   hidden: new Set(),
+  feedback: new Map(),
   chat: [],
   chatBusy: false,
 };
@@ -77,8 +85,10 @@ export type Action =
       keys: { anthropic: boolean; usajobs: boolean };
       ranked: readonly RankedJob[] | null;
       hidden: ReadonlySet<string>;
+      feedback: ReadonlyMap<string, "up" | "down">;
       chat: readonly ChatEntry[];
     }
+  | { type: "boot_failed"; message: string }
   | { type: "tab"; tab: Tab }
   | { type: "wizard_done"; profile: Profile }
   | { type: "resume"; resume: ResumeData }
@@ -86,7 +96,13 @@ export type Action =
   | { type: "keys"; keys: { anthropic: boolean; usajobs: boolean } }
   | { type: "search_start" }
   | { type: "search_status"; message: string }
-  | { type: "search_done"; ranked: readonly RankedJob[]; report: RunReport }
+  | { type: "feedback"; jobId: string; verdict: "up" | "down" | null }
+  | {
+      type: "search_done";
+      ranked: readonly RankedJob[];
+      report: RunReport;
+      warning: string;
+    }
   | { type: "search_failed"; message: string }
   | { type: "hide_job"; jobId: string }
   | { type: "chat_add"; entry: ChatEntry }
@@ -98,14 +114,18 @@ function reducer(state: AppState, action: Action): AppState {
       return {
         ...state,
         booted: true,
+        bootError: "",
         needsWizard: action.needsWizard,
         resume: action.resume,
         profile: action.profile,
         keys: action.keys,
         ranked: action.ranked,
         hidden: action.hidden,
+        feedback: action.feedback,
         chat: action.chat,
       };
+    case "boot_failed":
+      return { ...state, booted: false, bootError: action.message };
     case "tab":
       return { ...state, tab: action.tab };
     case "wizard_done":
@@ -124,7 +144,8 @@ function reducer(state: AppState, action: Action): AppState {
       return {
         ...state,
         searching: false,
-        searchStatus: "",
+        // A partial or total source failure stays visible after the run.
+        searchStatus: action.warning,
         ranked: action.ranked,
         lastReport: action.report,
       };
@@ -134,6 +155,12 @@ function reducer(state: AppState, action: Action): AppState {
       const hidden = new Set(state.hidden);
       hidden.add(action.jobId);
       return { ...state, hidden };
+    }
+    case "feedback": {
+      const feedback = new Map(state.feedback);
+      if (action.verdict === null) feedback.delete(action.jobId);
+      else feedback.set(action.jobId, action.verdict);
+      return { ...state, feedback };
     }
     case "chat_add":
       return { ...state, chat: [...state.chat, action.entry] };
@@ -157,16 +184,30 @@ export function useAppDispatch(): Dispatch<Action> {
 async function boot(dispatch: Dispatch<Action>): Promise<void> {
   await ensureDbReady();
 
-  const [wizardDone, baseResume, profile, anthropic, usajobs, hidden, chatRows] =
-    await Promise.all([
-      repo.getSetting(db, "wizard_done"),
-      repo.getLatestDocument(db, "base_resume"),
-      repo.getStoredProfile(db),
-      hasAnthropicKey(),
-      hasUsaJobsKey(),
-      repo.listFeedback(db, "hidden"),
-      repo.listRecentChatMessages(db, 50),
-    ]);
+  const [
+    wizardDone,
+    baseResume,
+    profile,
+    anthropic,
+    usajobs,
+    hidden,
+    ups,
+    downs,
+    chatRows,
+  ] = await Promise.all([
+    repo.getSetting(db, "wizard_done"),
+    repo.getLatestDocument(db, "base_resume"),
+    repo.getStoredProfile(db),
+    hasAnthropicKey(),
+    hasUsaJobsKey(),
+    repo.listFeedback(db, "hidden"),
+    repo.listFeedback(db, "up"),
+    repo.listFeedback(db, "down"),
+    repo.listRecentChatMessages(db, 50),
+  ]);
+
+  const resume =
+    baseResume === null ? null : (JSON.parse(baseResume.content) as ResumeData);
 
   let ranked: readonly RankedJob[] | null = null;
   try {
@@ -176,33 +217,81 @@ async function boot(dispatch: Dispatch<Action>): Promise<void> {
     // A failed re-rank must not stop the app from opening.
   }
 
+  // 👎 wins when both were ever recorded; either way one verdict per job.
+  const feedback = new Map<string, "up" | "down">();
+  for (const id of ups) feedback.set(id, "up");
+  for (const id of downs) feedback.set(id, "down");
+
+  // Rebuild document cards for messages that carry one, so a revised resume
+  // survives a restart with its buttons intact. Findings are re-computed
+  // against the CURRENT base resume — cheap, and more honest than replaying
+  // findings from before the base may have changed.
+  const chat: ChatEntry[] = [];
+  for (const m of chatRows) {
+    let card: ChatEntry["card"] = null;
+    if (m.relatedDocumentId != null) {
+      try {
+        const doc = await repo.getDocumentById(db, m.relatedDocumentId);
+        if (doc !== null && doc.kind === "final_resume") {
+          const docResume = JSON.parse(doc.content) as ResumeData;
+          const findings = resume === null ? [] : verifyResume(resume, docResume);
+          card = {
+            kind: "resume",
+            resumeJson: doc.content,
+            note: m.content,
+            findingsJson: JSON.stringify(findings),
+          };
+        }
+      } catch {
+        // A missing document just means no card; the text still reads fine.
+      }
+    }
+    chat.push({ id: m.id, role: m.role, content: m.content, card });
+  }
+
   dispatch({
     type: "booted",
     needsWizard: wizardDone === null,
-    resume: baseResume === null ? null : (JSON.parse(baseResume.content) as ResumeData),
+    resume,
     profile,
     keys: { anthropic, usajobs },
     ranked,
     hidden,
-    chat: chatRows.map((m) => ({
-      id: m.id,
-      role: m.role,
-      content: m.content,
-      card: null,
-    })),
+    feedback,
+    chat,
   });
 }
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initialState);
+  const [bootAttempt, setBootAttempt] = useState(0);
 
   useEffect(() => {
-    void boot(dispatch);
-  }, []);
+    boot(dispatch).catch((err: unknown) => {
+      // Never strand the person on the spinner. Say what happened in plain
+      // words and give them a button.
+      dispatch({
+        type: "boot_failed",
+        message:
+          "Cincinnatus could not open its saved data. " +
+          (err instanceof Error ? err.message : String(err)),
+      });
+    });
+  }, [bootAttempt]);
 
   return (
     <StateContext.Provider value={state}>
-      <DispatchContext.Provider value={dispatch}>{children}</DispatchContext.Provider>
+      <DispatchContext.Provider value={dispatch}>
+        <RetryBootContext.Provider value={() => setBootAttempt((n) => n + 1)}>
+          {children}
+        </RetryBootContext.Provider>
+      </DispatchContext.Provider>
     </StateContext.Provider>
   );
+}
+
+const RetryBootContext = createContext<() => void>(() => {});
+
+export function useRetryBoot(): () => void {
+  return useContext(RetryBootContext);
 }

@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Profile } from "../../core/types.ts";
 import type { ProgressEvent } from "../../core/ports.ts";
 import type { ResumeData } from "../../core/documents/types.ts";
@@ -7,9 +7,7 @@ import { profileFromResume } from "../../core/profile/fromResume.ts";
 import * as repo from "../../core/db/repo.ts";
 
 import { extractResumeFile } from "../../tauri/extractText.ts";
-import { createTauriLlm } from "../../tauri/llm.ts";
 import {
-  getSecret,
   setSecret,
   SECRET_ANTHROPIC_KEY,
   SECRET_USAJOBS_EMAIL,
@@ -19,11 +17,13 @@ import { tauriClock } from "../../tauri/clock.ts";
 
 import {
   db,
+  getLlm,
   runSearch,
   validateAnthropicKey,
   validateUsaJobsKey,
 } from "../app/services.ts";
 import { useAppDispatch, useAppState } from "../app/state.tsx";
+import { sourceTroubleWords } from "../app/searchRunner.ts";
 import { adoptBaseResume } from "../documents/actions.ts";
 import {
   Busy,
@@ -63,9 +63,10 @@ export function Wizard() {
 
   async function parseInBackground(text: string): Promise<void> {
     try {
-      const key = await getSecret(SECRET_ANTHROPIC_KEY);
-      if (key === null) throw new Error("no key");
-      const parsed = await parseResume(createTauriLlm(key), text);
+      // Via getLlm so the parse counts toward the monthly spend estimate.
+      const llm = await getLlm();
+      if (llm === null) throw new Error("no key");
+      const parsed = await parseResume(llm, text);
       await adoptBaseResume(parsed);
       await repo.setSetting(db, "base_resume_raw_text", text);
       setResumeData(parsed);
@@ -78,56 +79,74 @@ export function Wizard() {
     }
   }
 
+  // Each step change moves keyboard focus to the step container, so a screen
+  // reader announces the new screen instead of leaving focus on a button that
+  // just disappeared.
+  const stepRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    stepRef.current?.focus();
+  }, [step]);
+
   return (
-    <main className="mx-auto flex min-h-screen max-w-2xl flex-col justify-center gap-6 p-8">
-      {step === "welcome" && <WelcomeStep onNext={() => setStep("resume")} />}
-      {step === "resume" && (
-        <ResumeStep
-          alreadyHave={resumeData !== null}
-          onDone={(text) => {
-            setResumeText(text);
-            setResumeData(null);
-            setStep("ai_key");
-          }}
-          onSkip={() => setStep("ai_key")}
-        />
-      )}
-      {step === "ai_key" && (
-        <AiKeyStep
-          alreadyConnected={appKeys.anthropic}
-          onDone={(connected) => {
-            setHaveAiKey(connected);
-            // Move on RIGHT AWAY — the slow part happens in the background.
-            setStep("usajobs");
-            if (connected && resumeText !== null && resumeData === null) {
-              setParsing("working");
-              void parseInBackground(resumeText);
-            } else if (!connected && resumeText !== null) {
-              void repo.setSetting(db, "pending_resume_text", resumeText);
-            }
-          }}
-        />
-      )}
-      {step === "usajobs" && <UsaJobsStep onDone={() => setStep("preferences")} />}
-      {step === "preferences" && (
-        <PreferencesStep
-          resume={resumeData}
-          parsing={parsing}
-          onDone={async (profile) => {
-            await repo.saveProfile(db, profile, tauriClock.now(), null, null);
-            dispatch({ type: "profile", profile });
-            dispatch({
-              type: "keys",
-              keys: {
-                anthropic: haveAiKey || appKeys.anthropic,
-                usajobs: (await repo.getSetting(db, "usajobs_connected")) === "1",
-              },
-            });
-            setStep("search");
-          }}
-        />
-      )}
-      {step === "search" && <FirstSearchStep onAllDone={() => void finish(dispatch)} />}
+    <main className="mx-auto flex min-h-screen max-w-2xl flex-col justify-center p-8">
+      <div
+        key={step}
+        ref={stepRef}
+        tabIndex={-1}
+        className="flex flex-col gap-6 outline-none"
+      >
+        {step === "welcome" && <WelcomeStep onNext={() => setStep("resume")} />}
+        {step === "resume" && (
+          <ResumeStep
+            alreadyHave={resumeData !== null}
+            onDone={(text) => {
+              setResumeText(text);
+              setResumeData(null);
+              setStep("ai_key");
+            }}
+            onSkip={() => setStep("ai_key")}
+          />
+        )}
+        {step === "ai_key" && (
+          <AiKeyStep
+            alreadyConnected={appKeys.anthropic}
+            onDone={(connected) => {
+              setHaveAiKey(connected);
+              // Move on RIGHT AWAY — the slow part happens in the background.
+              setStep("usajobs");
+              if (connected && resumeText !== null && resumeData === null) {
+                setParsing("working");
+                void parseInBackground(resumeText);
+              } else if (!connected && resumeText !== null) {
+                void repo.setSetting(db, "pending_resume_text", resumeText);
+              }
+            }}
+          />
+        )}
+        {step === "usajobs" && <UsaJobsStep onDone={() => setStep("preferences")} />}
+        {step === "preferences" && (
+          <PreferencesStep
+            resume={resumeData}
+            parsing={parsing}
+            onStopWaiting={() => setParsing("failed")}
+            onDone={async (profile) => {
+              await repo.saveProfile(db, profile, tauriClock.now(), null, null);
+              dispatch({ type: "profile", profile });
+              dispatch({
+                type: "keys",
+                keys: {
+                  anthropic: haveAiKey || appKeys.anthropic,
+                  usajobs: (await repo.getSetting(db, "usajobs_connected")) === "1",
+                },
+              });
+              setStep("search");
+            }}
+          />
+        )}
+        {step === "search" && (
+          <FirstSearchStep onAllDone={() => void finish(dispatch)} />
+        )}
+      </div>
     </main>
   );
 }
@@ -390,10 +409,12 @@ function UsaJobsStep({ onDone }: { onDone: () => void }) {
 function PreferencesStep({
   resume,
   parsing,
+  onStopWaiting,
   onDone,
 }: {
   resume: ResumeData | null;
   parsing: Parsing;
+  onStopWaiting: () => void;
   onDone: (profile: Profile) => void;
 }) {
   const [work, setWork] = useState("");
@@ -454,7 +475,12 @@ function PreferencesStep({
         </p>
       )}
       {stillReading && (
-        <Busy label="Still reading your resume — about a minute. You can fill these in meanwhile." />
+        <>
+          <Busy label="Still reading your resume — about a minute. You can fill these in meanwhile." />
+          <QuietButton onClick={onStopWaiting}>
+            Stop waiting — I'll type what I'm looking for instead
+          </QuietButton>
+        </>
       )}
       {parsing === "failed" && (
         <Notice tone="warn">
@@ -534,7 +560,12 @@ function FirstSearchStep({ onAllDone }: { onAllDone: () => void }) {
       if (profile === null) throw new Error("No profile saved yet.");
       dispatch({ type: "search_start" });
       const { report: runReport, ranked } = await runSearch(profile, report);
-      dispatch({ type: "search_done", ranked: [...ranked], report: runReport });
+      dispatch({
+        type: "search_done",
+        ranked: [...ranked],
+        report: runReport,
+        warning: sourceTroubleWords(runReport),
+      });
       onAllDone();
     } catch (err) {
       startedRef.current = false;

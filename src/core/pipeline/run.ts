@@ -128,21 +128,35 @@ export async function runPipeline(options: RunOptions): Promise<RunResult> {
     }
   }
 
-  const freshlyEncoded: [string, string][] = [];
+  let embeddedCount = 0;
 
   for (let i = 0; i < toEmbed.length; i += EMBED_BATCH_SIZE) {
     const batchHashes = toEmbed.slice(i, i + EMBED_BATCH_SIZE);
     const batchTexts = batchHashes.map((h) => textForHash.get(h) ?? "");
     const vectors = await embedder.embed(batchTexts);
 
+    const batchEncoded: [string, string][] = [];
     for (let j = 0; j < batchHashes.length; j++) {
       const hash = batchHashes[j];
       const vector = vectors[j];
       if (hash === undefined || vector === undefined) continue;
       const encoded = encodeVector(vector);
-      freshlyEncoded.push([hash, encoded]);
+      batchEncoded.push([hash, encoded]);
       cached.set(hash, encoded);
     }
+
+    // Persist per batch, not at the end. A first run embeds thousands of jobs
+    // over many minutes; if the app closes partway, everything embedded so far
+    // must survive — the next run picks up where this one stopped instead of
+    // starting over.
+    await repo.saveEmbeddings(
+      db,
+      embedder.modelId,
+      embedder.dimensions,
+      startedAt,
+      batchEncoded,
+    );
+    embeddedCount += batchEncoded.length;
 
     reporter({
       kind: "embed_progress",
@@ -151,13 +165,6 @@ export async function runPipeline(options: RunOptions): Promise<RunResult> {
     });
   }
 
-  await repo.saveEmbeddings(
-    db,
-    embedder.modelId,
-    embedder.dimensions,
-    startedAt,
-    freshlyEncoded,
-  );
   await repo.setEmbedHashes(db, [...hashOf.entries()]);
 
   const vectorsByJob = new Map<string, Float32Array>();
@@ -200,7 +207,7 @@ export async function runPipeline(options: RunOptions): Promise<RunResult> {
     jobsSeen: fetched.length,
     jobsNew,
     duplicatesCollapsed: collapsed,
-    embedded: freshlyEncoded.length,
+    embedded: embeddedCount,
     fit,
     widenedBeyondRadius,
     candidates,

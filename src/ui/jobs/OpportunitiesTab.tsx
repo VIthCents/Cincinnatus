@@ -15,7 +15,13 @@ import {
 } from "../app/format.ts";
 import { useAppDispatch, useAppState } from "../app/state.tsx";
 import { PrepareDialog } from "./PrepareDialog.tsx";
-import { Busy, Notice, PrimaryButton, QuietButton } from "../components/ui.tsx";
+import {
+  Busy,
+  ModalShell,
+  Notice,
+  PrimaryButton,
+  QuietButton,
+} from "../components/ui.tsx";
 
 /**
  * The Opportunities tab (SPEC §8): one ranked list, one score, one big button
@@ -98,12 +104,20 @@ export function OpportunitiesTab() {
         </Notice>
       )}
 
-      {state.ranked !== null && visible.length === 0 && !state.searching && (
-        <Notice>
-          Nothing matches those filters right now. Try turning a filter off, or search
-          again later — new jobs show up all the time.
-        </Notice>
-      )}
+      {state.ranked !== null &&
+        visible.length === 0 &&
+        !state.searching &&
+        (remoteOnly || federalOnly || hideWeak ? (
+          <Notice>
+            Nothing matches those filters right now. Try turning a filter off, or search
+            again later — new jobs show up all the time.
+          </Notice>
+        ) : (
+          <Notice>
+            I didn't find jobs to show yet. New jobs show up all the time — try "Search
+            now" again later today.
+          </Notice>
+        ))}
 
       <ul className="space-y-4">
         {visible.slice(0, shown).map((ranked) => (
@@ -142,11 +156,21 @@ function JobCard({ ranked, onPrepare }: { ranked: RankedJob; onPrepare: () => vo
   const { job } = ranked;
   const salary = salaryWords(job);
   const why = state.profile === null ? null : whyWords(job, state.profile);
-  const [voted, setVoted] = useState<"up" | "down" | null>(null);
+  // Restored across launches; one verdict per job; tapping again un-votes.
+  const voted = state.feedback.get(job.id) ?? null;
 
   function vote(verdict: "up" | "down") {
-    setVoted(verdict);
-    void repo.saveFeedback(db, job.id, verdict, tauriClock.now());
+    const now = tauriClock.now();
+    if (voted === verdict) {
+      dispatch({ type: "feedback", jobId: job.id, verdict: null });
+      void repo.removeFeedback(db, job.id, verdict);
+      return;
+    }
+    dispatch({ type: "feedback", jobId: job.id, verdict });
+    void (async () => {
+      if (voted !== null) await repo.removeFeedback(db, job.id, voted);
+      await repo.saveFeedback(db, job.id, verdict, now);
+    })();
   }
 
   function hide() {
@@ -211,12 +235,8 @@ function PrepareGate({ ranked, onClose }: { ranked: RankedJob; onClose: () => vo
 
   if (state.resume === null) {
     return (
-      <div
-        role="dialog"
-        aria-modal="true"
-        className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/60 p-4"
-      >
-        <div className="w-full max-w-lg space-y-4 rounded-xl bg-white p-6 shadow-xl">
+      <ModalShell label="One thing first" onClose={onClose}>
+        <div className="space-y-4">
           <h2 className="text-2xl font-bold">One thing first</h2>
           <p className="text-lg">
             To write your application, I need your resume. Go to the Chat tab and use
@@ -235,7 +255,7 @@ function PrepareGate({ ranked, onClose }: { ranked: RankedJob; onClose: () => vo
             <QuietButton onClick={onClose}>Not now</QuietButton>
           </div>
         </div>
-      </div>
+      </ModalShell>
     );
   }
 

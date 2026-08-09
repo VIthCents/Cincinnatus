@@ -21,7 +21,8 @@ import { createGreenhouseSource } from "../../core/sources/greenhouse.ts";
 import { createUsaJobsSource } from "../../core/sources/usajobs.ts";
 import type { Source } from "../../core/sources/source.ts";
 import { markRunNow } from "../../core/app/schedule.ts";
-import { USAJOBS_DEFAULT_WINDOW_DAYS } from "../../core/config.ts";
+import { recordSpend } from "../../core/app/spend.ts";
+import { USAJOBS_DEFAULT_WINDOW_DAYS, estimateCostUsd } from "../../core/config.ts";
 import { MODEL_ID } from "../../tauri/embedder.ts";
 
 import starterWatchlist from "../../../data/starter-watchlist.json";
@@ -41,20 +42,43 @@ let embedderPromise: Promise<Embedder> | null = null;
  *
  * A FAILED load is not cached: caching the rejected promise would make every
  * "Try again" fail with the first attempt's error until the app restarts —
- * observed live when the wasm runtime was missing.
+ * observed live when the wasm runtime was missing. And a failed load reaches
+ * the user in plain words, not onnxruntime backend jargon.
  */
 export function getEmbedder(): Promise<Embedder> {
   embedderPromise ??= createTauriEmbedder().catch((err: unknown) => {
     embedderPromise = null;
-    throw err;
+    throw new Error(
+      "The job-matching tool could not start on this computer. Closing Cincinnatus and opening it again usually fixes this.",
+      { cause: err },
+    );
   });
   return embedderPromise;
 }
 
-/** Null when no key is connected — callers show the "connect AI" path. */
+/**
+ * Null when no key is connected — callers show the "connect AI" path.
+ *
+ * Every Llm handed out here counts its usage toward the monthly "AI used this
+ * month" estimate, so the Settings figure covers chat, analysis, revision,
+ * parsing, AND document prep — not just one flow.
+ */
 export async function getLlm(): Promise<Llm | null> {
   const key = await getSecret(SECRET_ANTHROPIC_KEY);
-  return key === null ? null : createTauriLlm(key);
+  if (key === null) return null;
+  const inner = createTauriLlm(key);
+  return {
+    async complete(req) {
+      const response = await inner.complete(req);
+      const cost = estimateCostUsd(
+        response.modelId,
+        response.inputTokens,
+        response.outputTokens,
+      );
+      void recordSpend(db, tauriClock.now(), cost);
+      return response;
+    },
+  };
 }
 
 export async function hasAnthropicKey(): Promise<boolean> {

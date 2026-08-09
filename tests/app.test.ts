@@ -138,6 +138,38 @@ describe("chatTurn", () => {
     expect(requests[0]!.messages[0]!.content).toBe("message 40");
   });
 
+  it("never sends a history that leads with an assistant turn (the API rejects it)", async () => {
+    const { llm, requests } = createFakeLlm(["ok", "ok"]);
+
+    // A chat that opens with chip output: assistant first.
+    await chatTurn(llm, {
+      history: [
+        { role: "assistant", content: "Here's my honest read of your resume:" },
+        { role: "assistant", content: "That needs the AI helper." },
+      ],
+      userMessage: "which fix first?",
+      resume: null,
+    });
+    expect(requests[0]!.messages[0]!.role).toBe("user");
+    expect(requests[0]!.messages).toHaveLength(1);
+
+    // Mixed: leading assistant dropped, later turns kept in order.
+    await chatTurn(llm, {
+      history: [
+        { role: "assistant", content: "welcome" },
+        { role: "user", content: "hello" },
+        { role: "assistant", content: "hi there" },
+      ],
+      userMessage: "next",
+      resume: null,
+    });
+    expect(requests[1]!.messages.map((m) => m.role)).toEqual([
+      "user",
+      "assistant",
+      "user",
+    ]);
+  });
+
   it("never bothers the model with an empty message", async () => {
     const { llm, requests } = createFakeLlm([]);
     const { reply } = await chatTurn(llm, {

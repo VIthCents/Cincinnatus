@@ -11,13 +11,19 @@ import { tauriClock } from "../tauri/clock.ts";
 
 import { db } from "./app/services.ts";
 import { runSearchNow } from "./app/searchRunner.ts";
-import { AppProvider, useAppDispatch, useAppState, type Tab } from "./app/state.tsx";
+import {
+  AppProvider,
+  useAppDispatch,
+  useAppState,
+  useRetryBoot,
+  type Tab,
+} from "./app/state.tsx";
 import { PrintProvider } from "./documents/print.tsx";
 import { Wizard } from "./wizard/Wizard.tsx";
 import { ChatTab } from "./chat/ChatTab.tsx";
 import { OpportunitiesTab } from "./jobs/OpportunitiesTab.tsx";
 import { SettingsTab } from "./settings/SettingsTab.tsx";
-import { Busy } from "./components/ui.tsx";
+import { Busy, Notice, PrimaryButton } from "./components/ui.tsx";
 
 export default function App() {
   return (
@@ -80,8 +86,15 @@ function Shell() {
 
   if (!state.booted) {
     return (
-      <main className="flex min-h-screen items-center justify-center">
-        <Busy label="Starting up..." />
+      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-5 p-8">
+        {state.bootError === "" ? (
+          <Busy label="Starting up..." />
+        ) : (
+          <>
+            <Notice tone="warn">{state.bootError}</Notice>
+            <BootRetryButton />
+          </>
+        )}
       </main>
     );
   }
@@ -99,6 +112,15 @@ function Shell() {
         {state.tab === "settings" && <SettingsTab />}
       </div>
     </div>
+  );
+}
+
+function BootRetryButton() {
+  const retry = useRetryBoot();
+  return (
+    <PrimaryButton onClick={retry} autoFocus>
+      Try again
+    </PrimaryButton>
   );
 }
 

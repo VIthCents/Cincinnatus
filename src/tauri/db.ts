@@ -36,7 +36,15 @@ export class TauriDb implements Db {
 
   async #connection(): Promise<Database> {
     if (this.#db === null) {
-      this.#db = await Database.load(`sqlite:${this.#name}`);
+      const db = await Database.load(`sqlite:${this.#name}`);
+      // Same pairing as the Node adapter, same reason: without WAL +
+      // synchronous=NORMAL, SQLite fsyncs every commit — and runMany here is
+      // one commit per row, so a first search's thousands of inserts become
+      // minutes of pure disk wait inside the app.
+      await db.execute("PRAGMA journal_mode = WAL");
+      await db.execute("PRAGMA synchronous = NORMAL");
+      await db.execute("PRAGMA busy_timeout = 5000");
+      this.#db = db;
     }
     return this.#db;
   }

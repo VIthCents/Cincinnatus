@@ -425,3 +425,88 @@ in plain words how to get a key and what still works without one, and exits 2.
 **Consequence.** First live run of analyze/tailor/coverletter happens when the user drops keys into `.env`
 — the code path difference is only `createNodeLlm` vs the fake, both behind the same port. Recorded-fixture
 capture for LLM calls is not built; revisit if prompt regressions become a concern.
+
+---
+
+## 2026-08-09 — Phase 3: API keys in an app-config file until the Phase 4 keychain
+
+**Context.** The wizard (Phase 3) collects keys, but the OS keychain lands in Phase 4 per the SPEC's own
+phasing — and stronghold cannot run in the harness anyway. SPEC §4 forbids keys in SQLite.
+
+**Decision.** Two Rust commands, `get_secret`/`set_secret`, over `secrets.json` in the app config dir.
+The command signatures are the contract; Phase 4 swaps the backing store without touching the UI.
+
+**Consequence.** Keys are plaintext-at-rest until Phase 4, protected only by OS user-profile ACLs.
+Documented here rather than hidden. Never in SQLite, never logged, never in state dumps.
+
+---
+
+## 2026-08-09 — All app networking through tauri-plugin-http; webview fetch only for the model
+
+**Context.** Webview fetch is subject to CORS (USAJobs sends no CORS headers) and CSP; plugin-http runs
+requests on the Rust side, where the capability file scopes them per host.
+
+**Decision.** Job APIs and Anthropic go through plugin-http (the Anthropic SDK accepts a custom fetch).
+The capability allowlist mirrors `src/core/net/allowlist.ts` — constraint 1 enforced at the process
+boundary even if the TypeScript layer were deleted. The one webview-fetch egress is the one-time ~23 MB
+model download from huggingface.co, allowed in the CSP and disclosed in Settings copy.
+
+**Consequence.** Adding a source in Phase 4 means updating BOTH the TS allowlist and the capability file
+— a deliberate two-place change, each a one-line diff, each reviewed.
+
+---
+
+## 2026-08-09 — Scheduler: Rust metronome, TypeScript policy
+
+**Context.** SPEC §3 puts "scheduler tick" in src-tauri; the 6-hour policy needs settings access and unit
+tests, which Rust-side policy would not get.
+
+**Decision.** Rust emits a bare `scheduler-tick` event every 30 minutes; `src/core/app/schedule.ts`
+decides whether a search is due (interval setting, last-run timestamp, 0 = off). On-launch and tray
+"Search now" reuse the same TS path.
+
+**Consequence.** Policy is tested in vitest (due-at-exact-interval, off-switch, first-run). The metronome
+is 12 lines of Rust nobody needs to touch again.
+
+---
+
+## 2026-08-09 — Chat has no tool use; actions are buttons
+
+**Context.** SPEC §7 scopes chat to resume/career/jobs; constraint 7 forbids agent frameworks. An LLM
+that can trigger app actions is also an injection surface pointed at a vulnerable population.
+
+**Decision.** `chat/agent.ts` is converse-only on the fast model, with the scope and the no-legal/
+medical/VA-advice lines in a versioned prompt (tested for presence). The three chips call engine
+functions directly — deterministic, testable, not steerable by message content.
+
+**Consequence.** Chat cannot be talked into searching, spending credits, or editing documents. The cost
+is that free text like "find me jobs" answers with words instead of running a search; the chip is beside
+the input box.
+
+---
+
+## 2026-08-09 — Ship every CPU wasm variant of onnxruntime-web
+
+**Context.** Live testing: onnxruntime picks its wasm build by feature detection, and WebView2 151
+requested the asyncify variant while only the plain one was shipped — "no available backend found".
+
+**Decision.** `scripts/copy-wasm.ts` ships plain + asyncify + jspi (~49 MB, gitignored, bundled). jsep is
+excluded — it is the WebGPU build and we run device "wasm".
+
+**Consequence.** ~49 MB of installer weight for boot-proof model loading across WebView versions. Phase 4
+may prune to the measured-selected variant once telemetry-free evidence accumulates (i.e., our own
+testing, since there is no telemetry).
+
+---
+
+## 2026-08-09 — js-sha256 for the webview Hasher
+
+**Context.** The Hasher port is sync (job ids computed inside normalize loops); `crypto.subtle` is
+async-only. The alternative was hand-transcribing ~90 lines of SHA-256 round constants — rejected in
+Phase 1 as "subtly wrong for a year" territory.
+
+**Decision.** `js-sha256` (small, widely exercised) as the webview adapter's implementation. Node keeps
+`node:crypto`.
+
+**Consequence.** One tiny dependency, scoped to one adapter file, replaceable behind the port whenever
+WebCrypto grows a sync digest or the port goes async for other reasons.

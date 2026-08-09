@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from "react";
 
 /**
@@ -84,6 +85,55 @@ export function Notice({
       ? "border-amber-400 bg-amber-50 text-amber-900"
       : "border-blue-300 bg-blue-50 text-blue-900";
   return (
-    <div className={`rounded-lg border px-4 py-3 text-lg ${styles}`}>{children}</div>
+    // Announced, not just colored: warnings interrupt, info waits its turn.
+    <div
+      role={tone === "warn" ? "alert" : "status"}
+      className={`rounded-lg border px-4 py-3 text-lg ${styles}`}
+    >
+      {children}
+    </div>
+  );
+}
+
+/**
+ * Modal scaffolding both dialogs share: labelled, Escape closes, and focus
+ * lands inside on open so a keyboard or screen-reader user is never stranded
+ * behind an invisible wall.
+ */
+export function ModalShell({
+  label,
+  onClose,
+  children,
+  wide = false,
+}: {
+  label: string;
+  onClose: () => void;
+  children: ReactNode;
+  wide?: boolean;
+}) {
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    panelRef.current?.focus();
+  }, []);
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={label}
+      className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/60 p-4"
+      onKeyDown={(e) => {
+        if (e.key === "Escape") onClose();
+      }}
+    >
+      <div
+        ref={panelRef}
+        tabIndex={-1}
+        className={`max-h-[92vh] w-full overflow-y-auto rounded-xl bg-white p-6 shadow-xl outline-none ${wide ? "max-w-5xl" : "max-w-lg"}`}
+      >
+        {children}
+      </div>
+    </div>
   );
 }
