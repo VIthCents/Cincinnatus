@@ -32,7 +32,11 @@ export async function writeCoverLetter(
     jsonSchema: COVER_LETTER_SCHEMA,
   });
 
-  const letter = JSON.parse(response.text) as CoverLetter;
+  const raw = JSON.parse(response.text) as CoverLetter;
+  const letter: CoverLetter = {
+    ...raw,
+    closing: stripSignature(raw.closing, base.name),
+  };
 
   return {
     document: letter,
@@ -40,4 +44,32 @@ export async function writeCoverLetter(
     note: "",
     findings: verifyCoverLetter(base, letter),
   };
+}
+
+/**
+ * Drop the signature the model sometimes writes into `closing`.
+ *
+ * Every renderer — LetterView, the DOCX exporter, the harness — prints the
+ * name after the closing, because that is what a letter is. When the model also
+ * puts it in the closing the letter signs off twice:
+ *
+ *     Sincerely,
+ *     Danielle R. Okafor
+ *     DANIELLE R. OKAFOR
+ *
+ * Observed live on 2026-08-09. The schema now says closing is the valediction
+ * only, but a prompt is a request and this is the guarantee.
+ */
+export function stripSignature(closing: string, name: string): string {
+  const target = name.trim().toLowerCase();
+  if (target === "") return closing.trim();
+
+  const kept = closing
+    .split("\n")
+    .filter((line) => line.trim().toLowerCase() !== target)
+    .join("\n")
+    .trim();
+
+  // If removing the name emptied it, the model put ONLY the name there.
+  return kept === "" ? "Sincerely," : kept;
 }

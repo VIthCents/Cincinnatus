@@ -116,6 +116,10 @@ export const COVER_LETTER_SCHEMA = {
   properties: {
     salutation: STRING,
     bodyParagraphs: STRING_ARRAY,
-    closing: STRING,
+    closing: {
+      type: "string",
+      description:
+        "The valediction only, e.g. 'Sincerely,'. Do NOT include the applicant's name — every renderer prints it on the next line, so a name here signs the letter twice.",
+    },
   },
 } as const;

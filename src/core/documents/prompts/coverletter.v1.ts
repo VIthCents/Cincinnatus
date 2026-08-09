@@ -20,6 +20,17 @@ posting.
   company does, one sentence may connect the veteran's experience to that
   mission. Do not flatter.
 - Plain, confident words. No "utilize", no "leverage", no "passionate".
+- Write for a civilian who has never served. Translate every military term into
+  the words a hiring manager already knows: not "PMCS" but "scheduled vehicle
+  inspections"; not "TC AIMS II" or "GCSS-Army" but "the computer systems that
+  track trucks, drivers and routes"; not "M915" but "tractor-trailer"; not "NCO"
+  but "supervisor"; not "88M" but "truck driver". Unit names, form numbers and
+  operation names are noise to this reader — cut them. A rank ("Sergeant") and a
+  branch ("U.S. Army") are fine, because those are words civilians know.
+  This is the same advice Cincinnatus gives when it critiques a resume, and the
+  letter it writes must not contradict it.
 - Close simply: what they want (the job), and that they are ready to talk.
+- The closing field is the valediction alone, e.g. "Sincerely,". Never put the
+  applicant's name in it — it is printed on the following line already.
 
 ${NO_FABRICATION_RULE}`;

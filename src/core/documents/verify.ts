@@ -31,6 +31,86 @@ function norm(value: string): string {
     .trim();
 }
 
+/**
+ * Words too common to be evidence of anything. Deliberately short: this list
+ * decides what the no-fabrication check will let through, so every entry has to
+ * earn its place, and none of them names a skill.
+ */
+const STOPWORDS = new Set([
+  "a",
+  "an",
+  "and",
+  "the",
+  "of",
+  "for",
+  "to",
+  "in",
+  "on",
+  "with",
+  "or",
+  "class",
+  "level",
+  "type",
+  "general",
+  "basic",
+  "advanced",
+  "experience",
+  "skills",
+  "using",
+  "use",
+  "work",
+  "working",
+]);
+
+/**
+ * Word stems of everything the veteran actually wrote.
+ *
+ * Stemmed to a four-character prefix so that "driving" is recognised in a
+ * resume that says "drivers", and "planning" in one that says "plan". Crude on
+ * purpose: a real stemmer is a dependency and a vocabulary, and this only has
+ * to decide whether a word is *present*, not what it means.
+ */
+function supportingStems(base: ResumeData): ReadonlySet<string> {
+  const parts: string[] = [
+    ...base.skills,
+    ...base.certifications,
+    ...base.education.map((e) => `${e.credential} ${e.institution}`),
+  ];
+  if (base.summary !== null) parts.push(base.summary);
+  if (base.clearance !== null) parts.push(base.clearance);
+  for (const role of base.experience) {
+    parts.push(role.title, role.org, ...role.bullets);
+  }
+  return new Set(
+    norm(parts.join(" "))
+      .split(" ")
+      .filter((w) => w !== "")
+      .map(stem),
+  );
+}
+
+/** Four-character prefix, or the whole word when it is shorter. */
+function stem(word: string): string {
+  return word.length <= 4 ? word : word.slice(0, 4);
+}
+
+/**
+ * Is every meaningful word of this skill somewhere in the resume?
+ *
+ * Requiring ALL content words is what keeps this strict while the stemming
+ * keeps it usable: a fabricated "Python programming" still fails, because
+ * neither word has a stem anywhere in the resume, and "Fleet management" still
+ * fails on "fleet" even though "manage" is present. A skill made only of
+ * stopwords is not evidence of itself, so it fails too.
+ */
+function isSupportedBy(skill: string, support: ReadonlySet<string>): boolean {
+  const words = norm(skill)
+    .split(" ")
+    .filter((w) => w !== "" && !STOPWORDS.has(w));
+  if (words.length === 0) return false;
+  return words.every((w) => support.has(stem(w)));
+}
+
 function normDate(value: string | null): string {
   return value === null ? "" : value.trim().toLowerCase();
 }
@@ -191,9 +271,16 @@ export function verifyResume(
   // New skill words are often legitimate translation ("supervision" for squad
   // leadership), so they are surfaced for confirmation rather than treated as
   // fabrication.
-  const baseSkills = new Set(base.skills.map(norm));
+  //
+  // Evidence for a skill is looked for in the WHOLE resume, not just its skills
+  // list. Measured live 2026-08-09: tailoring for a driving job produced nine
+  // flags including "route planning" and "pre-trip/post-trip inspections", both
+  // plainly described in the experience bullets, and "Class A CDL driving"
+  // against a resume that says "CDL Class A". Nine false alarms on one document
+  // is how you teach someone to click past the one check that matters.
+  const support = supportingStems(base);
   for (const skill of produced.skills) {
-    if (!baseSkills.has(norm(skill))) {
+    if (!isSupportedBy(skill, support)) {
       findings.push({
         kind: "new_skill",
         value: skill,

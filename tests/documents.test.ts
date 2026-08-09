@@ -190,6 +190,33 @@ describe("verifyResume", () => {
     );
   });
 
+  /**
+   * Rewording is what tailoring IS. Measured live 2026-08-09, tailoring for a
+   * driving job produced nine "new skill" flags, every one of them describing
+   * something the resume plainly said — "Class A CDL driving" against a resume
+   * reading "CDL Class A (NC)", "pre-trip inspections" against a PMCS bullet.
+   * Nine false alarms on one document teaches people to click past the only
+   * check standing between them and a fabricated claim.
+   */
+  it("does not flag a skill the resume already describes in other words", () => {
+    const tailored = tailoredCopy({
+      skills: [
+        "Class A CDL driving", // certifications: "CDL Class A (NC), hazmat endorsement"
+        "Hazmat endorsement",
+        "Convoy dispatch", // skills: "Dispatch", "Convoy planning"
+        "Vehicle readiness", // bullet: "45 vehicles; readiness rate 96%"
+      ],
+    });
+    expect(verifyResume(BASE, tailored)).toHaveLength(0);
+  });
+
+  it("still catches a skill the resume does not support anywhere", () => {
+    const tailored = tailoredCopy({ skills: [...BASE.skills, "Python programming"] });
+    const findings = verifyResume(BASE, tailored);
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({ kind: "new_skill", severity: "review" });
+  });
+
   it("surfaces new skills as review-severity, not fabrication", () => {
     const tailored = tailoredCopy({ skills: [...BASE.skills, "Fleet management"] });
     const findings = verifyResume(BASE, tailored);
