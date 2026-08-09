@@ -144,6 +144,27 @@ export async function existingJobIds(
   return found;
 }
 
+export async function getJobById(db: Db, id: string): Promise<Job | null> {
+  const rows = await db.all<JobRow>("SELECT * FROM jobs WHERE id = ?", [id]);
+  const row = rows[0];
+  return row === undefined ? null : rowToJob(row);
+}
+
+/**
+ * Ids are 64 hex chars; nobody should have to type one. A prefix of 8+ chars
+ * is unambiguous in practice — and when it is not, both matches are returned
+ * so the caller can say so instead of guessing.
+ */
+export async function findJobsByIdPrefix(db: Db, prefix: string): Promise<Job[]> {
+  // The prefix is hex from our own output, but escape defensively anyway.
+  const safe = prefix.toLowerCase().replace(/[^a-f0-9]/g, "");
+  if (safe === "") return [];
+  const rows = await db.all<JobRow>("SELECT * FROM jobs WHERE id LIKE ? LIMIT 3", [
+    `${safe}%`,
+  ]);
+  return rows.map(rowToJob);
+}
+
 /** Every job that is not a collapsed duplicate. */
 export async function listRankableJobs(db: Db): Promise<Job[]> {
   const rows = await db.all<JobRow>(

@@ -1,11 +1,12 @@
 #!/usr/bin/env node
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { parseArgs } from "node:util";
-import { dirname, join } from "node:path";
+import { dirname, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { USAJOBS_DEFAULT_WINDOW_DAYS } from "../src/core/config.ts";
+import { USAJOBS_DEFAULT_WINDOW_DAYS, estimateCostUsd } from "../src/core/config.ts";
 import { parseProfile } from "../src/core/profile/parse.ts";
+import { profileFromResume } from "../src/core/profile/fromResume.ts";
 import { buildSearchTerms } from "../src/core/pipeline/queries.ts";
 import { runPipeline } from "../src/core/pipeline/run.ts";
 import {
@@ -14,31 +15,226 @@ import {
 } from "../src/core/sources/greenhouse.ts";
 import { createUsaJobsSource } from "../src/core/sources/usajobs.ts";
 import type { Source } from "../src/core/sources/source.ts";
-import type { ProgressEvent, Reporter } from "../src/core/ports.ts";
-import type { RankedJob, WatchlistEntry } from "../src/core/types.ts";
+import type { Llm, ProgressEvent, Reporter } from "../src/core/ports.ts";
+import type { Job, Profile, RankedJob, WatchlistEntry } from "../src/core/types.ts";
+import * as repo from "../src/core/db/repo.ts";
+
+import { analyzeResume } from "../src/core/documents/analyze.ts";
+import { parseResume } from "../src/core/documents/parseResume.ts";
+import { reviseResume } from "../src/core/documents/revise.ts";
+import { tailorResume } from "../src/core/documents/tailor.ts";
+import { writeCoverLetter } from "../src/core/documents/coverletter.ts";
+import {
+  coverLetterToDocxBase64,
+  resumeToDocxBase64,
+} from "../src/core/documents/exportDocx.ts";
+import type { Finding, ResumeData } from "../src/core/documents/types.ts";
 
 import { NodeDb } from "../src/node/db.ts";
 import { nodeClock, nodeHasher } from "../src/node/clock.ts";
 import { nodeHttp } from "../src/node/http.ts";
 import { createNodeEmbedder } from "../src/node/embedder.ts";
 import { createCapturingHttp, createFixtureHttp } from "../src/node/fixtureHttp.ts";
+import { createNodeLlm, llmErrorMessage } from "../src/node/llm.ts";
+import { extractResumeText } from "../src/node/extractText.ts";
+import { loadDotEnv } from "../src/node/env.ts";
 
 /**
- * Headless CLI for the job pipeline (SPEC section 9, Phase 1).
+ * Headless CLI for the whole engine (SPEC §9, Phases 1 and 2).
  *
- * This exists so the entire pipeline can be exercised and judged before any UI
- * is written. It is also what keeps src/core honest: if anything in core
- * reached for Tauri or the DOM, this would stop running.
+ *   pnpm harness search --profile fixtures/profile.sample.json
+ *   pnpm harness analyze --resume fixtures/resumes/infantry.pdf
+ *   pnpm harness parse-resume --resume fixtures/resumes/logistics.txt
+ *   pnpm harness tailor --resume .data/out/resume.json --job fixtures/jobs/usajobs.json
+ *   pnpm harness coverletter --resume .data/out/resume.json --job-id 3aef21 --db .data/full.db
+ *   pnpm harness revise --resume .data/out/resume.json --instruction "shorten it"
+ *
+ * Exit codes: 0 done · 1 crashed · 2 usage problem · 3 done, but the
+ * no-fabrication check flagged something that needs the user's eyes.
  */
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
+const OUT_DIR = join(repoRoot, ".data", "out");
 
 // -----------------------------------------------------------------------------
-// Output helpers
+// Small helpers
 // -----------------------------------------------------------------------------
 
 function out(line = ""): void {
   process.stdout.write(`${line}\n`);
+}
+
+function slug(text: string): string {
+  return (
+    text
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 40) || "output"
+  );
+}
+
+function writeOut(fileName: string, content: string | Buffer): string {
+  mkdirSync(OUT_DIR, { recursive: true });
+  const full = join(OUT_DIR, fileName);
+  writeFileSync(full, content);
+  return full.replace(`${repoRoot}\\`, "").replace(/\\/g, "/");
+}
+
+/** Wraps the Llm so every subcommand can end with an honest cost line. */
+function withCostTracking(inner: Llm): { llm: Llm; costLine(): string } {
+  let cost = 0;
+  let calls = 0;
+  return {
+    llm: {
+      async complete(req) {
+        const response = await inner.complete(req);
+        calls += 1;
+        cost += estimateCostUsd(
+          response.modelId,
+          response.inputTokens,
+          response.outputTokens,
+        );
+        return response;
+      },
+    },
+    costLine(): string {
+      if (calls === 0) return "";
+      const rounded = cost < 0.005 ? "less than a cent" : `about $${cost.toFixed(2)}`;
+      return `AI used for this: ${rounded} of your credits (rough estimate).`;
+    },
+  };
+}
+
+function requireLlm(): { llm: Llm; costLine(): string } | null {
+  const key = process.env["ANTHROPIC_API_KEY"];
+  if (key === undefined || key === "") {
+    out("This command needs your AI access key, and none is set.");
+    out();
+    out("  1. Get a key at console.anthropic.com (the developer console —");
+    out("     a claude.ai Pro/Max chat plan does NOT include one).");
+    out("  2. Copy .env.example to .env and paste the key after ANTHROPIC_API_KEY=");
+    out();
+    out("Job searching works without it: pnpm harness search --profile <path>");
+    return null;
+  }
+  return withCostTracking(createNodeLlm(key));
+}
+
+/**
+ * A resume argument is either a ResumeData JSON (from a prior parse-resume) or
+ * a resume file (.pdf/.docx/.txt) that gets extracted and parsed on the spot.
+ */
+async function loadResumeData(path: string, llm: Llm): Promise<ResumeData> {
+  const full = join(repoRoot, path);
+  if (!existsSync(full)) {
+    throw new Error(`No file at ${path}.`);
+  }
+  if (extname(full).toLowerCase() === ".json") {
+    return JSON.parse(readFileSync(full, "utf8")) as ResumeData;
+  }
+  const extracted = await extractResumeText(full);
+  out(
+    `Read your resume (${extracted.kind}, ${extracted.text.length} characters). Understanding it...`,
+  );
+  return parseResume(llm, extracted.text);
+}
+
+function loadJobFromFile(path: string): Job {
+  const full = join(repoRoot, path);
+  if (!existsSync(full)) throw new Error(`No job file at ${path}.`);
+  return JSON.parse(readFileSync(full, "utf8")) as Job;
+}
+
+async function loadJob(values: {
+  job?: string;
+  "job-id"?: string;
+  db?: string;
+}): Promise<Job> {
+  if (values.job !== undefined) return loadJobFromFile(values.job);
+
+  if (values["job-id"] !== undefined) {
+    const dbPath = join(repoRoot, values.db ?? join(".data", "harness.db"));
+    if (!existsSync(dbPath)) {
+      throw new Error(
+        `--job-id needs the search database, and there is none at ${values.db ?? ".data/harness.db"}. Run a search first.`,
+      );
+    }
+    const db = new NodeDb(dbPath);
+    try {
+      const matches = await repo.findJobsByIdPrefix(db, values["job-id"]);
+      if (matches.length === 1 && matches[0] !== undefined) return matches[0];
+      if (matches.length === 0) {
+        throw new Error(
+          `No saved job starts with "${values["job-id"]}". Copy the id from the search results.`,
+        );
+      }
+      throw new Error(
+        `More than one saved job starts with "${values["job-id"]}". Use a few more characters.`,
+      );
+    } finally {
+      db.close();
+    }
+  }
+
+  throw new Error("Which job? Pass --job <file> or --job-id <id from search results>.");
+}
+
+function printFindings(
+  findings: readonly Finding[],
+  context: "derived" | "authored",
+): boolean {
+  const high = findings.filter((f) => f.severity === "high");
+  const review = findings.filter((f) => f.severity === "review");
+
+  if (high.length > 0) {
+    out();
+    if (context === "derived") {
+      out("STOP — the check found things your resume does not back up:");
+    } else {
+      out("Changes that need your confirmation:");
+    }
+    for (const finding of high) out(`  ! ${finding.message}`);
+    if (context === "derived") {
+      out("  These were NOT silently accepted. Fix the base resume or regenerate.");
+    }
+  }
+  if (review.length > 0) {
+    out();
+    out("Worth a quick look:");
+    for (const finding of review) out(`  - ${finding.message}`);
+  }
+  return high.length > 0;
+}
+
+// -----------------------------------------------------------------------------
+// search (Phase 1)
+// -----------------------------------------------------------------------------
+
+interface WatchlistFile {
+  readonly boards: readonly {
+    ats: WatchlistEntry["ats"];
+    slug: string;
+    company_label: string;
+    board_name?: string;
+    source: WatchlistEntry["source"];
+    sector?: string;
+    note?: string;
+  }[];
+}
+
+export function loadWatchlist(): WatchlistEntry[] {
+  const path = join(repoRoot, "data", "starter-watchlist.json");
+  const parsed = JSON.parse(readFileSync(path, "utf8")) as WatchlistFile;
+  return parsed.boards.map((b) => ({
+    ats: b.ats,
+    slug: b.slug,
+    companyLabel: b.company_label,
+    boardName: b.board_name ?? null,
+    source: b.source,
+    sector: b.sector ?? null,
+    note: b.note ?? null,
+  }));
 }
 
 function money(
@@ -84,46 +280,190 @@ function printRanked(ranked: readonly RankedJob[], top: number): void {
         `${r.job.postedAtIsEstimated ? " (estimated)" : ""} · score ${r.finalScore.toFixed(2)}` +
         `${salary === "" ? "" : ` · ${salary}`}`,
     );
-    out(`    ${r.job.url}`);
+    out(`    id ${r.job.id.slice(0, 12)} · ${r.job.url}`);
   });
+
+  if (ranked.length > 0) {
+    out();
+    out(
+      `To prepare an application:  pnpm harness tailor --resume <your resume> --job-id <id>`,
+    );
+  }
+}
+
+interface SearchFlags {
+  profile?: string;
+  db?: string;
+  top?: string;
+  "max-embed"?: string;
+  "usajobs-days"?: string;
+  offline?: boolean;
+  capture?: boolean;
+}
+
+async function commandSearch(values: SearchFlags): Promise<number> {
+  if (values.profile === undefined) {
+    out(
+      "Which profile? Try: pnpm harness search --profile fixtures/profile.sample.json",
+    );
+    return 2;
+  }
+
+  const profilePath = join(repoRoot, values.profile);
+  if (!existsSync(profilePath)) {
+    out(`No profile file at ${values.profile}`);
+    return 2;
+  }
+
+  let raw: unknown;
+  try {
+    raw = JSON.parse(readFileSync(profilePath, "utf8"));
+  } catch (err) {
+    out(
+      `${values.profile} is not valid JSON. ${err instanceof Error ? err.message : ""}`,
+    );
+    return 2;
+  }
+
+  const parsed = parseProfile(raw);
+  if (!parsed.ok) {
+    out(`There are problems with ${values.profile}:`);
+    for (const message of parsed.errors) out(`  - ${message}`);
+    return 2;
+  }
+  const profile: Profile = parsed.value;
+
+  const dbPath = join(repoRoot, values.db ?? join(".data", "harness.db"));
+  mkdirSync(dirname(dbPath), { recursive: true });
+  const db = new NodeDb(dbPath);
+
+  const fixtureDir = join(repoRoot, "fixtures", "http");
+  const http =
+    values.offline === true
+      ? createFixtureHttp(fixtureDir)
+      : values.capture === true
+        ? createCapturingHttp(nodeHttp, fixtureDir)
+        : nodeHttp;
+
+  const reporter: Reporter = (event: ProgressEvent) => {
+    switch (event.kind) {
+      case "source_start":
+        process.stdout.write(`  ${event.label} ... `);
+        break;
+      case "source_done":
+        out(event.notModified ? "unchanged" : `${event.fetched} jobs`);
+        break;
+      case "source_error":
+        out(`could not check`);
+        out(`      ${event.message}`);
+        break;
+      case "embed_progress":
+        process.stdout.write(
+          `\r  matching jobs to your profile: ${event.done}/${event.total}`,
+        );
+        if (event.done >= event.total) out();
+        break;
+      case "note":
+        out(`  ${event.message}`);
+        break;
+    }
+  };
+
+  const watchlist = loadWatchlist();
+  const sources: Source[] = watchlist
+    .filter((entry) => entry.ats === "greenhouse")
+    .map((entry) => createGreenhouseSource(entry.slug, entry.companyLabel));
+
+  const usaKey = process.env["USAJOBS_API_KEY"];
+  const usaAgent = process.env["USAJOBS_USER_AGENT"];
+  const terms = buildSearchTerms(profile);
+
+  if (
+    usaKey !== undefined &&
+    usaKey !== "" &&
+    usaAgent !== undefined &&
+    usaAgent !== ""
+  ) {
+    sources.push(
+      createUsaJobsSource({
+        auth: { apiKey: usaKey, userAgentEmail: usaAgent },
+        keywords: terms.titles,
+        windowDays: Number(values["usajobs-days"] ?? USAJOBS_DEFAULT_WINDOW_DAYS),
+      }),
+    );
+  } else {
+    out(
+      "Federal jobs are turned off. Set USAJOBS_API_KEY and USAJOBS_USER_AGENT to include them.",
+    );
+  }
+
+  out();
+  out(
+    `Searching ${sources.length} places for jobs like "${terms.titles.slice(0, 3).join('", "')}"...`,
+  );
+  out();
+
+  const embedder = await createNodeEmbedder({
+    cacheDir: join(repoRoot, ".models"),
+    onFirstLoad: (message) => out(`  ${message}`),
+  });
+
+  const maxEmbedRaw = values["max-embed"];
+  const { report, ranked } = await runPipeline({
+    db,
+    http,
+    clock: nodeClock,
+    hasher: nodeHasher,
+    embedder,
+    reporter,
+    profile,
+    sources,
+    maxEmbed: maxEmbedRaw === undefined ? null : Number(maxEmbedRaw),
+  });
+
+  const failed = report.sources.filter((s) => s.error !== null);
+
+  out();
+  out(
+    `Checked ${report.sources.length} places in ${((report.finishedAt - report.startedAt) / 1000).toFixed(1)}s. ` +
+      `Found ${report.jobsSeen} jobs (${report.jobsNew} new), ` +
+      `collapsed ${report.duplicatesCollapsed} duplicates, matched ${report.embedded}.`,
+  );
+
+  if (failed.length > 0) {
+    out(`${failed.length} place(s) could not be checked this time:`);
+    for (const source of failed) out(`  - ${source.error}`);
+  }
+
+  if (report.fit !== null) {
+    out(
+      `Match scores ranged ${report.fit.min.toFixed(1)} to ${report.fit.max.toFixed(1)} (middle ${report.fit.median.toFixed(1)}).`,
+    );
+  }
+
+  if (report.widenedBeyondRadius) {
+    out(
+      `Only ${report.reachable} of ${report.candidates} jobs are near ${profile.location?.city ?? "you"} or remote, ` +
+        `so this list covers the whole country.`,
+    );
+  } else {
+    out(
+      `${report.reachable} of ${report.candidates} jobs are near ${profile.location?.city ?? "you"} or remote. ` +
+        `Showing those.`,
+    );
+  }
+
+  printRanked(ranked, Number(values.top ?? 25));
+
+  db.close();
+  return 0;
 }
 
 // -----------------------------------------------------------------------------
-// Watchlist
+// verify-watchlist
 // -----------------------------------------------------------------------------
 
-interface WatchlistFile {
-  readonly boards: readonly {
-    ats: WatchlistEntry["ats"];
-    slug: string;
-    company_label: string;
-    board_name?: string;
-    source: WatchlistEntry["source"];
-    sector?: string;
-    note?: string;
-  }[];
-}
-
-export function loadWatchlist(): WatchlistEntry[] {
-  const path = join(repoRoot, "data", "starter-watchlist.json");
-  const parsed = JSON.parse(readFileSync(path, "utf8")) as WatchlistFile;
-  return parsed.boards.map((b) => ({
-    ats: b.ats,
-    slug: b.slug,
-    companyLabel: b.company_label,
-    boardName: b.board_name ?? null,
-    source: b.source,
-    sector: b.sector ?? null,
-    note: b.note ?? null,
-  }));
-}
-
-/**
- * Confirm every starter board still resolves AND still belongs to the company
- * we claim. The name check is the point: several plausible slugs return 200
- * with real jobs but are an entirely different business.
- */
-async function verifyWatchlist(): Promise<number> {
+async function commandVerifyWatchlist(): Promise<number> {
   const entries = loadWatchlist();
   const ctx = {
     http: nodeHttp,
@@ -140,8 +480,6 @@ async function verifyWatchlist(): Promise<number> {
 
   for (const entry of entries) {
     if (entry.ats !== "greenhouse") {
-      // Lever and Ashby clients arrive in Phase 4; their slugs are recorded but
-      // not yet checkable through a client that does not exist.
       out(
         `  ?  ${entry.ats}:${entry.slug} — ${entry.companyLabel} (not checked until Phase 4)`,
       );
@@ -154,10 +492,6 @@ async function verifyWatchlist(): Promise<number> {
         failures++;
         continue;
       }
-      // Exact match against the name recorded when the slug was verified, not
-      // a fuzzy comparison with our display label. A board that has been sold,
-      // renamed, or reassigned should fail loudly rather than pass on a
-      // substring — that is the whole point of the second signal.
       if (entry.boardName === null) {
         out(
           `  ?  ${entry.ats}:${entry.slug} — board says "${name}", nothing recorded to compare against`,
@@ -189,15 +523,258 @@ async function verifyWatchlist(): Promise<number> {
 }
 
 // -----------------------------------------------------------------------------
-// Main
+// Document commands (Phase 2)
 // -----------------------------------------------------------------------------
 
+async function commandAnalyze(values: { resume?: string }): Promise<number> {
+  if (values.resume === undefined) {
+    out(
+      "Which resume? Try: pnpm harness analyze --resume fixtures/resumes/infantry.pdf",
+    );
+    return 2;
+  }
+  const tracked = requireLlm();
+  if (tracked === null) return 2;
+
+  const extracted = await extractResumeText(join(repoRoot, values.resume));
+  out(`Read your resume (${extracted.kind}). Looking it over...`);
+
+  const critique = await analyzeResume(tracked.llm, extracted.text);
+
+  out();
+  out(critique.summary);
+  out();
+  out("What is working:");
+  for (const strength of critique.strengths) out(`  + ${strength}`);
+  out();
+  out("What is holding it back:");
+  for (const gap of critique.gaps) out(`  - ${gap}`);
+  out();
+  out("What to fix, one at a time:");
+  critique.fixes.forEach((fix, i) => {
+    out(`  ${i + 1}. ${fix.what}`);
+    out(`     Why: ${fix.why}`);
+    out(`     How: ${fix.how}`);
+  });
+  out();
+  out(tracked.costLine());
+  return 0;
+}
+
+async function commandParseResume(values: {
+  resume?: string;
+  out?: string;
+  "profile-out"?: string;
+}): Promise<number> {
+  if (values.resume === undefined) {
+    out(
+      "Which resume? Try: pnpm harness parse-resume --resume fixtures/resumes/logistics.txt",
+    );
+    return 2;
+  }
+  const tracked = requireLlm();
+  if (tracked === null) return 2;
+
+  const resume = await loadResumeData(values.resume, tracked.llm);
+
+  const outPath = values.out ?? join(".data", "out", "resume.json");
+  mkdirSync(dirname(join(repoRoot, outPath)), { recursive: true });
+  writeFileSync(
+    join(repoRoot, outPath),
+    `${JSON.stringify(resume, null, 2)}\n`,
+    "utf8",
+  );
+  out(`Saved the structured resume to ${outPath}`);
+  out(
+    `  ${resume.experience.length} jobs, ${resume.certifications.length} certifications, ` +
+      `${resume.skills.length} skills${resume.clearance === null ? "" : `, clearance: ${resume.clearance}`}`,
+  );
+
+  if (values["profile-out"] !== undefined) {
+    const nowYear = new Date(nodeClock.now()).getUTCFullYear();
+    const profile = profileFromResume(resume, nowYear);
+    writeFileSync(
+      join(repoRoot, values["profile-out"]),
+      `${JSON.stringify(profile, null, 2)}\n`,
+      "utf8",
+    );
+    out(
+      `Saved a search profile to ${values["profile-out"]} — use it with: pnpm harness search --profile ${values["profile-out"]}`,
+    );
+  }
+
+  out();
+  out(tracked.costLine());
+  return 0;
+}
+
+async function commandRevise(values: {
+  resume?: string;
+  instruction?: string;
+  out?: string;
+}): Promise<number> {
+  if (values.resume === undefined || values.instruction === undefined) {
+    out(
+      'Usage: pnpm harness revise --resume <resume.json> --instruction "what to change"',
+    );
+    return 2;
+  }
+  const tracked = requireLlm();
+  if (tracked === null) return 2;
+
+  const current = await loadResumeData(values.resume, tracked.llm);
+  const result = await reviseResume(tracked.llm, current, values.instruction);
+
+  const outPath = values.out ?? join(".data", "out", "resume-revised.json");
+  writeFileSync(
+    join(repoRoot, outPath),
+    `${JSON.stringify(result.document, null, 2)}\n`,
+    "utf8",
+  );
+
+  out(result.note);
+  out(`Saved to ${outPath}`);
+  printFindings(result.findings, "authored");
+  out();
+  out(tracked.costLine());
+  return 0;
+}
+
+async function commandTailor(values: {
+  resume?: string;
+  job?: string;
+  "job-id"?: string;
+  db?: string;
+}): Promise<number> {
+  if (values.resume === undefined) {
+    out(
+      "Usage: pnpm harness tailor --resume <resume file or .json> --job <file> | --job-id <id>",
+    );
+    return 2;
+  }
+  const tracked = requireLlm();
+  if (tracked === null) return 2;
+
+  const base = await loadResumeData(values.resume, tracked.llm);
+  const job = await loadJob(values);
+  const federal = job.source === "usajobs";
+
+  out(
+    `Tailoring your resume for: ${job.title} at ${job.company}${federal ? " (federal format)" : ""}...`,
+  );
+
+  const result = await tailorResume(tracked.llm, base, job);
+
+  const name = `tailored-${slug(job.company)}-${slug(job.title)}`;
+  const jsonPath = writeOut(
+    `${name}.json`,
+    `${JSON.stringify(result.document, null, 2)}\n`,
+  );
+  const docxBase64 = await resumeToDocxBase64(result.document, { federal });
+  const docxPath = writeOut(`${name}.docx`, Buffer.from(docxBase64, "base64"));
+
+  out();
+  out(result.note);
+  out(`Saved:  ${docxPath}`);
+  out(`        ${jsonPath}`);
+
+  const hasHigh = printFindings(result.findings, "derived");
+  out();
+  out(tracked.costLine());
+  return hasHigh ? 3 : 0;
+}
+
+async function commandCoverLetter(values: {
+  resume?: string;
+  job?: string;
+  "job-id"?: string;
+  db?: string;
+}): Promise<number> {
+  if (values.resume === undefined) {
+    out(
+      "Usage: pnpm harness coverletter --resume <resume file or .json> --job <file> | --job-id <id>",
+    );
+    return 2;
+  }
+  const tracked = requireLlm();
+  if (tracked === null) return 2;
+
+  const base = await loadResumeData(values.resume, tracked.llm);
+  const job = await loadJob(values);
+
+  out(`Writing a cover letter for: ${job.title} at ${job.company}...`);
+
+  const result = await writeCoverLetter(tracked.llm, base, job);
+
+  out();
+  out(result.document.salutation);
+  for (const paragraph of result.document.bodyParagraphs) {
+    out();
+    out(paragraph);
+  }
+  out();
+  out(result.document.closing);
+  out(base.name);
+
+  const name = `coverletter-${slug(job.company)}-${slug(job.title)}`;
+  const docxBase64 = await coverLetterToDocxBase64(result.document, base);
+  const docxPath = writeOut(`${name}.docx`, Buffer.from(docxBase64, "base64"));
+  writeOut(`${name}.json`, `${JSON.stringify(result.document, null, 2)}\n`);
+  out();
+  out(`Saved: ${docxPath}`);
+
+  const hasHigh = printFindings(result.findings, "derived");
+  out();
+  out(tracked.costLine());
+  return hasHigh ? 3 : 0;
+}
+
+// -----------------------------------------------------------------------------
+// Help + dispatch
+// -----------------------------------------------------------------------------
+
+function printHelp(): void {
+  out("Cincinnatus harness — the whole engine, no app needed.");
+  out();
+  out("Finding jobs (no AI key needed):");
+  out("  pnpm harness search --profile fixtures/profile.sample.json");
+  out("    --db <path>          SQLite file (default .data/harness.db)");
+  out("    --top <n>            how many jobs to print (default 25)");
+  out("    --max-embed <n>      cap new embeddings; for fast iteration only");
+  out("    --usajobs-days <n>   how far back to search federal jobs (default 7)");
+  out("    --capture            run live and record every response to fixtures/http/");
+  out("    --offline            replay what --capture recorded; no network at all");
+  out("  pnpm harness verify-watchlist");
+  out();
+  out("Working on a resume (needs your AI access key in .env):");
+  out("  pnpm harness analyze --resume fixtures/resumes/infantry.pdf");
+  out("  pnpm harness parse-resume --resume <file> [--out p] [--profile-out p]");
+  out('  pnpm harness revise --resume <resume.json> --instruction "..." [--out p]');
+  out(
+    "  pnpm harness tailor --resume <file|json> --job <file> | --job-id <id> [--db p]",
+  );
+  out(
+    "  pnpm harness coverletter --resume <file|json> --job <file> | --job-id <id> [--db p]",
+  );
+  out();
+  out("Exit codes: 0 done · 1 crashed · 2 usage problem · 3 done but the");
+  out("no-fabrication check flagged something for you to look at.");
+}
+
 async function main(): Promise<number> {
-  const { values } = parseArgs({
+  loadDotEnv(join(repoRoot, ".env"));
+
+  const { values, positionals } = parseArgs({
     options: {
       profile: { type: "string" },
+      resume: { type: "string" },
+      job: { type: "string" },
+      "job-id": { type: "string" },
+      instruction: { type: "string" },
+      out: { type: "string" },
+      "profile-out": { type: "string" },
       db: { type: "string" },
-      top: { type: "string", default: "25" },
+      top: { type: "string" },
       "max-embed": { type: "string" },
       "usajobs-days": { type: "string" },
       offline: { type: "boolean", default: false },
@@ -205,196 +782,46 @@ async function main(): Promise<number> {
       "verify-watchlist": { type: "boolean", default: false },
       help: { type: "boolean", default: false },
     },
-    allowPositionals: false,
+    allowPositionals: true,
   });
 
+  const command =
+    positionals[0] ??
+    (values["verify-watchlist"] === true
+      ? "verify-watchlist"
+      : values.profile !== undefined
+        ? "search"
+        : "help");
+
   if (values.help === true) {
-    out("pnpm harness --profile fixtures/profile.sample.json");
-    out();
-    out("  --profile <path>      profile JSON (required unless --verify-watchlist)");
-    out("  --db <path>           SQLite file (default .data/harness.db)");
-    out("  --top <n>             how many jobs to print (default 25)");
-    out("  --max-embed <n>       cap new embeddings; for fast iteration only");
-    out("  --usajobs-days <n>    how far back to search federal jobs (default 7)");
-    out("  --capture             run live and record every response to fixtures/http/");
-    out("  --offline             replay what --capture recorded; no network at all");
-    out("                        (run --capture once first; the recordings are");
-    out("                         local and gitignored, they can be ~30 MB)");
-    out("  --verify-watchlist    check every starter board still resolves");
+    printHelp();
     return 0;
   }
 
-  if (values["verify-watchlist"] === true) return verifyWatchlist();
-
-  if (values.profile === undefined) {
-    out("Which profile? Try: pnpm harness --profile fixtures/profile.sample.json");
-    return 2;
+  switch (command) {
+    case "search":
+      return commandSearch(values);
+    case "verify-watchlist":
+      return commandVerifyWatchlist();
+    case "analyze":
+      return commandAnalyze(values);
+    case "parse-resume":
+      return commandParseResume(values);
+    case "revise":
+      return commandRevise(values);
+    case "tailor":
+      return commandTailor(values);
+    case "coverletter":
+      return commandCoverLetter(values);
+    case "help":
+      printHelp();
+      return 0;
+    default:
+      out(`Unknown command "${command}".`);
+      out();
+      printHelp();
+      return 2;
   }
-
-  // --- profile -------------------------------------------------------------
-
-  const profilePath = join(repoRoot, values.profile);
-  if (!existsSync(profilePath)) {
-    out(`No profile file at ${values.profile}`);
-    return 2;
-  }
-
-  let raw: unknown;
-  try {
-    raw = JSON.parse(readFileSync(profilePath, "utf8"));
-  } catch (err) {
-    out(
-      `${values.profile} is not valid JSON. ${err instanceof Error ? err.message : ""}`,
-    );
-    return 2;
-  }
-
-  const parsed = parseProfile(raw);
-  if (!parsed.ok) {
-    out(`There are problems with ${values.profile}:`);
-    for (const message of parsed.errors) out(`  - ${message}`);
-    return 2;
-  }
-  const profile = parsed.value;
-
-  // --- wiring --------------------------------------------------------------
-
-  const dbPath = join(repoRoot, values.db ?? join(".data", "harness.db"));
-  mkdirSync(dirname(dbPath), { recursive: true });
-  const db = new NodeDb(dbPath);
-
-  const fixtureDir = join(repoRoot, "fixtures", "http");
-  const http =
-    values.offline === true
-      ? createFixtureHttp(fixtureDir)
-      : values.capture === true
-        ? createCapturingHttp(nodeHttp, fixtureDir)
-        : nodeHttp;
-
-  const reporter: Reporter = (event: ProgressEvent) => {
-    switch (event.kind) {
-      case "source_start":
-        process.stdout.write(`  ${event.label} ... `);
-        break;
-      case "source_done":
-        out(event.notModified ? "unchanged" : `${event.fetched} jobs`);
-        break;
-      case "source_error":
-        out(`could not check`);
-        out(`      ${event.message}`);
-        break;
-      case "embed_progress":
-        // Rewritten in place so a long run shows movement without scrolling.
-        process.stdout.write(
-          `\r  matching jobs to your profile: ${event.done}/${event.total}`,
-        );
-        if (event.done >= event.total) out();
-        break;
-      case "note":
-        out(`  ${event.message}`);
-        break;
-    }
-  };
-
-  // --- sources -------------------------------------------------------------
-
-  const watchlist = loadWatchlist();
-  const sources: Source[] = watchlist
-    .filter((entry) => entry.ats === "greenhouse")
-    .map((entry) => createGreenhouseSource(entry.slug, entry.companyLabel));
-
-  const usaKey = process.env["USAJOBS_API_KEY"];
-  const usaAgent = process.env["USAJOBS_USER_AGENT"];
-  const terms = buildSearchTerms(profile);
-
-  if (
-    usaKey !== undefined &&
-    usaKey !== "" &&
-    usaAgent !== undefined &&
-    usaAgent !== ""
-  ) {
-    sources.push(
-      createUsaJobsSource({
-        auth: { apiKey: usaKey, userAgentEmail: usaAgent },
-        // Searched one at a time and unioned by the client — Keyword ANDs its
-        // terms, so passing them joined returns nothing.
-        keywords: terms.titles,
-        windowDays: Number(values["usajobs-days"] ?? USAJOBS_DEFAULT_WINDOW_DAYS),
-      }),
-    );
-  } else {
-    out(
-      "Federal jobs are turned off. Set USAJOBS_API_KEY and USAJOBS_USER_AGENT to include them.",
-    );
-  }
-
-  // --- run -----------------------------------------------------------------
-
-  out();
-  out(
-    `Searching ${sources.length} places for jobs like "${terms.titles.slice(0, 3).join('", "')}"...`,
-  );
-  out();
-
-  const embedder = await createNodeEmbedder({
-    cacheDir: join(repoRoot, ".models"),
-    onFirstLoad: (message) => out(`  ${message}`),
-  });
-
-  const maxEmbedRaw = values["max-embed"];
-  const { report, ranked } = await runPipeline({
-    db,
-    http,
-    clock: nodeClock,
-    hasher: nodeHasher,
-    embedder,
-    reporter,
-    profile,
-    sources,
-    maxEmbed: maxEmbedRaw === undefined ? null : Number(maxEmbedRaw),
-  });
-
-  // --- report --------------------------------------------------------------
-
-  const failed = report.sources.filter((s) => s.error !== null);
-
-  out();
-  out(
-    `Checked ${report.sources.length} places in ${((report.finishedAt - report.startedAt) / 1000).toFixed(1)}s. ` +
-      `Found ${report.jobsSeen} jobs (${report.jobsNew} new), ` +
-      `collapsed ${report.duplicatesCollapsed} duplicates, matched ${report.embedded}.`,
-  );
-
-  if (failed.length > 0) {
-    out(`${failed.length} place(s) could not be checked this time:`);
-    for (const source of failed) out(`  - ${source.error}`);
-  }
-
-  if (report.fit !== null) {
-    // If min and max are within a point or two, final_score is really just
-    // measuring recency and the ranking is not discriminating. Print it so that
-    // is visible rather than assumed.
-    out(
-      `Match scores ranged ${report.fit.min.toFixed(1)} to ${report.fit.max.toFixed(1)} (middle ${report.fit.median.toFixed(1)}).`,
-    );
-  }
-
-  if (report.widenedBeyondRadius) {
-    out(
-      `Only ${report.reachable} of ${report.candidates} jobs are near ${profile.location?.city ?? "you"} or remote, ` +
-        `so this list covers the whole country.`,
-    );
-  } else {
-    out(
-      `${report.reachable} of ${report.candidates} jobs are near ${profile.location?.city ?? "you"} or remote. ` +
-        `Showing those.`,
-    );
-  }
-
-  printRanked(ranked, Number(values.top ?? 25));
-
-  db.close();
-  return 0;
 }
 
 main()
@@ -403,8 +830,6 @@ main()
   })
   .catch((err: unknown) => {
     out();
-    out(
-      `The search stopped early. ${err instanceof Error ? err.message : String(err)}`,
-    );
+    out(llmErrorMessage(err));
     process.exitCode = 1;
   });

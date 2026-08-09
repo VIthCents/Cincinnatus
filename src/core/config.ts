@@ -91,3 +91,43 @@ export const USER_AGENT =
  * ranking. Deliberately low: this only removes the obviously irrelevant.
  */
 export const MIN_TITLE_OVERLAP = 0;
+
+// -----------------------------------------------------------------------------
+// AI models (SPEC §2: two constants in one config file)
+// -----------------------------------------------------------------------------
+
+/**
+ * Resume analysis, revision, tailoring, cover letters.
+ *
+ * SPEC §2's default was `claude-sonnet-4-6`; the current Sonnet is
+ * `claude-sonnet-5` (verified against Anthropic's docs 2026-08-08 — see
+ * docs/DECISIONS.md). Sonnet rather than Opus because these calls run on the
+ * user's own prepaid credits: document quality matters, but a veteran with $5
+ * of credits should get dozens of tailored applications out of it, not a few.
+ */
+export const DOC_MODEL = "claude-sonnet-5";
+
+/** Chat and match scoring: cheap, fast, good enough for short judgments. */
+export const FAST_MODEL = "claude-haiku-4-5";
+
+/**
+ * List prices in USD per million tokens, for the plain-language running cost
+ * estimate ("AI used this month: about $1.20"). Estimates only — billing truth
+ * lives in the user's Anthropic console.
+ */
+export const MODEL_PRICES_PER_MTOK: Readonly<
+  Record<string, { input: number; output: number }>
+> = {
+  [DOC_MODEL]: { input: 3, output: 15 },
+  [FAST_MODEL]: { input: 1, output: 5 },
+};
+
+export function estimateCostUsd(
+  model: string,
+  inputTokens: number,
+  outputTokens: number,
+): number {
+  const price = MODEL_PRICES_PER_MTOK[model];
+  if (price === undefined) return 0;
+  return (inputTokens * price.input + outputTokens * price.output) / 1_000_000;
+}

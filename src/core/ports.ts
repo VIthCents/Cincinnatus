@@ -112,6 +112,55 @@ export interface Embedder {
 }
 
 // -----------------------------------------------------------------------------
+// Llm
+// -----------------------------------------------------------------------------
+
+export interface LlmMessage {
+  readonly role: "user" | "assistant";
+  readonly content: string;
+}
+
+export interface LlmRequest {
+  /**
+   * Logical role, not a model id. The adapter maps "doc" → DOC_MODEL and
+   * "fast" → FAST_MODEL from config.ts, so a model bump is one diff in one
+   * file rather than a sweep through the engine.
+   */
+  readonly model: "doc" | "fast";
+  readonly system: string;
+  readonly messages: readonly LlmMessage[];
+  readonly maxTokens: number;
+  /**
+   * When present, the adapter enforces this JSON Schema on the output
+   * (structured outputs), so `text` is guaranteed-parseable JSON matching it.
+   */
+  readonly jsonSchema?: Readonly<Record<string, unknown>>;
+}
+
+export interface LlmResponse {
+  readonly text: string;
+  /** For the plain-language running cost estimate (SPEC §7). */
+  readonly inputTokens: number;
+  readonly outputTokens: number;
+  /** The concrete model id that served the request. */
+  readonly modelId: string;
+}
+
+/**
+ * The AI brain, behind a port for the same reasons as everything else: core
+ * cannot do network I/O, tests must run without a key or a network, and the
+ * app must degrade gracefully when no key is connected (constraint 6) — which
+ * is easy to test when "no key" is just an adapter that rejects.
+ *
+ * PRIVACY INVARIANT (constraint 3): the ONLY user data that may ever enter an
+ * LlmRequest is resume text, profile fields, and job text — and only through
+ * the functions in src/core/documents/. Nothing else egresses.
+ */
+export interface Llm {
+  complete(req: LlmRequest): Promise<LlmResponse>;
+}
+
+// -----------------------------------------------------------------------------
 // Hasher
 // -----------------------------------------------------------------------------
 
