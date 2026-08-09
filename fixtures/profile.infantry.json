@@ -1,0 +1,24 @@
+{
+  "_comment": "SYNTHETIC. Not a real person. A second evaluation profile so the ranking golden set is not tuned to one veteran. Derived from fixtures/resumes/infantry.txt. Do NOT edit this with your own details — copy it to .data/ and pass --profile instead.",
+
+  "titles": ["Security Officer", "Team Leader", "Operations Supervisor"],
+  "skills": [
+    "Team leadership",
+    "Training and instruction",
+    "Weapons maintenance",
+    "Equipment accountability",
+    "Emergency first aid",
+    "Physical security",
+    "Standing watch"
+  ],
+  "mocCodes": ["0311"],
+  "branch": "Marine Corps",
+  "clearance": "Secret",
+  "education": ["High school diploma"],
+  "yearsExperience": 8,
+  "location": { "city": "Jacksonville", "state": "NC" },
+  "radiusMiles": 50,
+  "remotePreference": "any",
+  "salaryFloor": 45000,
+  "excludedKeywords": ["commission only", "unpaid"]
+}

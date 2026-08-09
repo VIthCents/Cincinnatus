@@ -720,3 +720,40 @@ Until then the app must be honest rather than empty: the design system's "Where 
 disclosure already names the unreachable employers and tells the person to go to those career pages
 directly. That copy is not a consolation prize — for this audience it is currently the most useful thing
 on the screen.
+
+---
+
+## 2026-08-09 — Ranking has a measured quality gate
+
+**Context.** Ranking had no quality measurement of any kind. That is how `tests/ranking.test.ts` came to
+assert the central ordering bug as intended behaviour — "this is the assertion that matters" — and sit
+green while a CDL driver was shown software engineering roles. It is also why, diagnosing that bug, it
+was possible to reach two confident and opposite wrong conclusions before the data settled it.
+
+**Decision.** A golden set and an NDCG gate. `scripts/export-eval.ts` samples real jobs from a populated
+database — stratified across the head of the ranking, a keyword sweep, and an evenly-spaced tail, so the
+set can see a good job buried at rank 3,000 and not only measure precision at the top. Each row carries
+its **measured** cosine, so `tests/rankEval.test.ts` drives the real `rankJobs` offline with no model and
+no network, by synthesising a unit vector whose dot product is that cosine.
+
+Labels came from three independent judges against a written rubric — a hiring manager, a veteran
+employment counsellor, and the veteran herself — with a separate adjudication pass for disagreements.
+On the first set all 49 were unanimous, which is some evidence the rubric is unambiguous.
+
+**Consequence.** Baseline **NDCG@10 = 0.455** on 49 labelled jobs (35/12/2 across labels 0/1/2). The test
+is a ratchet at 0.45: raise it when the ranking improves, never lower it to make a change pass.
+
+The gate immediately localised the two remaining defects, and neither is the blend:
+
+1. **Age still reorders fit gaps under 1/FRESHNESS_FLOOR.** "Military Shipping Lead" has the highest fit
+   in the set (57.2) and a unanimous label of 2, and sits at rank 8 because it is old.
+2. **The encoder does not discriminate.** "Firefighter (Basic Life Support)" scores 51.5 against a CDL
+   driver and is labelled 0 by all three judges; "Class A Driver" scores 47.0 and is labelled 2. No blend
+   tuning fixes that ordering — it is `buildJobText`/`buildProfileText` work, and this fixture cannot see
+   it, because the cosines are frozen. Evaluating an embedding change needs a live run.
+
+**Limits, stated so they are not forgotten.** The candidates are stratified toward the head, so almost
+everything in the set scores well and NDCG here is pessimistic against the whole corpus — deliberate, for
+a gate. `fixtures/rank-eval/infantry.jsonl` is exported and committed but **not yet labelled**; a second
+profile exists specifically so tuning cannot quietly overfit to one veteran, and it is not doing that job
+until it has labels.
