@@ -82,7 +82,11 @@ export function createCapturingHttp(inner: Http, dir: string): Http {
         headers: response.headers,
         file,
       };
-      writeFileSync(manifestPath(dir), `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+      writeFileSync(
+        manifestPath(dir),
+        `${JSON.stringify(manifest, null, 2)}\n`,
+        "utf8",
+      );
 
       return response;
     },

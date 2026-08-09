@@ -1,0 +1,4 @@
+{
+  "status": 401,
+  "body": "{\"type\":\"https://tools.ietf.org/html/rfc9110#section-15.5.2\",\"title\":\"Unauthorized\",\"status\":401,\"traceId\":\"00-12e37287fb2a2d2a7bf77306dc1f6a10-955a45d3a250916e-01\"}"
+}

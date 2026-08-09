@@ -76,7 +76,9 @@ function optionalNumber(
 function parseLocation(value: unknown, errors: string[]): ProfileLocation | null {
   if (value === undefined || value === null) return null;
   if (!isObject(value)) {
-    errors.push(`"location" should look like { "city": "Fayetteville", "state": "NC" }.`);
+    errors.push(
+      `"location" should look like { "city": "Fayetteville", "state": "NC" }.`,
+    );
     return null;
   }
   const city = optionalString(value["city"], "location.city", errors);
@@ -99,7 +101,9 @@ export function parseProfile(input: unknown): ParseResult<Profile> {
   if (!isObject(input)) {
     return {
       ok: false,
-      errors: ["The profile file should contain a single JSON object, starting with {."],
+      errors: [
+        "The profile file should contain a single JSON object, starting with {.",
+      ],
     };
   }
 
@@ -126,7 +130,11 @@ export function parseProfile(input: unknown): ParseResult<Profile> {
   const radiusRaw = input["radiusMiles"];
   let radiusMiles = 50;
   if (radiusRaw !== undefined && radiusRaw !== null) {
-    if (typeof radiusRaw !== "number" || !Number.isFinite(radiusRaw) || radiusRaw <= 0) {
+    if (
+      typeof radiusRaw !== "number" ||
+      !Number.isFinite(radiusRaw) ||
+      radiusRaw <= 0
+    ) {
       errors.push(`"radiusMiles" should be a number of miles, like 50.`);
     } else {
       radiusMiles = radiusRaw;

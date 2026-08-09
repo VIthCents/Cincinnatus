@@ -8,7 +8,10 @@ import { USAJOBS_DEFAULT_WINDOW_DAYS } from "../src/core/config.ts";
 import { parseProfile } from "../src/core/profile/parse.ts";
 import { buildSearchTerms } from "../src/core/pipeline/queries.ts";
 import { runPipeline } from "../src/core/pipeline/run.ts";
-import { createGreenhouseSource, fetchGreenhouseBoardName } from "../src/core/sources/greenhouse.ts";
+import {
+  createGreenhouseSource,
+  fetchGreenhouseBoardName,
+} from "../src/core/sources/greenhouse.ts";
 import { createUsaJobsSource } from "../src/core/sources/usajobs.ts";
 import type { Source } from "../src/core/sources/source.ts";
 import type { ProgressEvent, Reporter } from "../src/core/ports.ts";
@@ -38,7 +41,11 @@ function out(line = ""): void {
   process.stdout.write(`${line}\n`);
 }
 
-function money(min: number | null, max: number | null, interval: string | null): string {
+function money(
+  min: number | null,
+  max: number | null,
+  interval: string | null,
+): string {
   if (min === null && max === null) return "";
   const fmt = (n: number): string => `$${n.toLocaleString("en-US")}`;
   const range =
@@ -135,7 +142,9 @@ async function verifyWatchlist(): Promise<number> {
     if (entry.ats !== "greenhouse") {
       // Lever and Ashby clients arrive in Phase 4; their slugs are recorded but
       // not yet checkable through a client that does not exist.
-      out(`  ?  ${entry.ats}:${entry.slug} — ${entry.companyLabel} (not checked until Phase 4)`);
+      out(
+        `  ?  ${entry.ats}:${entry.slug} — ${entry.companyLabel} (not checked until Phase 4)`,
+      );
       continue;
     }
     try {
@@ -163,13 +172,19 @@ async function verifyWatchlist(): Promise<number> {
         failures++;
       }
     } catch (err) {
-      out(`  ✗  ${entry.ats}:${entry.slug} — ${err instanceof Error ? err.message : String(err)}`);
+      out(
+        `  ✗  ${entry.ats}:${entry.slug} — ${err instanceof Error ? err.message : String(err)}`,
+      );
       failures++;
     }
   }
 
   out();
-  out(failures === 0 ? "All checked boards look right." : `${failures} board(s) need attention.`);
+  out(
+    failures === 0
+      ? "All checked boards look right."
+      : `${failures} board(s) need attention.`,
+  );
   return failures === 0 ? 0 : 1;
 }
 
@@ -226,7 +241,9 @@ async function main(): Promise<number> {
   try {
     raw = JSON.parse(readFileSync(profilePath, "utf8"));
   } catch (err) {
-    out(`${values.profile} is not valid JSON. ${err instanceof Error ? err.message : ""}`);
+    out(
+      `${values.profile} is not valid JSON. ${err instanceof Error ? err.message : ""}`,
+    );
     return 2;
   }
 
@@ -266,7 +283,9 @@ async function main(): Promise<number> {
         break;
       case "embed_progress":
         // Rewritten in place so a long run shows movement without scrolling.
-        process.stdout.write(`\r  matching jobs to your profile: ${event.done}/${event.total}`);
+        process.stdout.write(
+          `\r  matching jobs to your profile: ${event.done}/${event.total}`,
+        );
         if (event.done >= event.total) out();
         break;
       case "note":
@@ -286,7 +305,12 @@ async function main(): Promise<number> {
   const usaAgent = process.env["USAJOBS_USER_AGENT"];
   const terms = buildSearchTerms(profile);
 
-  if (usaKey !== undefined && usaKey !== "" && usaAgent !== undefined && usaAgent !== "") {
+  if (
+    usaKey !== undefined &&
+    usaKey !== "" &&
+    usaAgent !== undefined &&
+    usaAgent !== ""
+  ) {
     sources.push(
       createUsaJobsSource({
         auth: { apiKey: usaKey, userAgentEmail: usaAgent },
@@ -297,13 +321,17 @@ async function main(): Promise<number> {
       }),
     );
   } else {
-    out("Federal jobs are turned off. Set USAJOBS_API_KEY and USAJOBS_USER_AGENT to include them.");
+    out(
+      "Federal jobs are turned off. Set USAJOBS_API_KEY and USAJOBS_USER_AGENT to include them.",
+    );
   }
 
   // --- run -----------------------------------------------------------------
 
   out();
-  out(`Searching ${sources.length} places for jobs like "${terms.titles.slice(0, 3).join('", "')}"...`);
+  out(
+    `Searching ${sources.length} places for jobs like "${terms.titles.slice(0, 3).join('", "')}"...`,
+  );
   out();
 
   const embedder = await createNodeEmbedder({
@@ -370,6 +398,8 @@ main()
   })
   .catch((err: unknown) => {
     out();
-    out(`The search stopped early. ${err instanceof Error ? err.message : String(err)}`);
+    out(
+      `The search stopped early. ${err instanceof Error ? err.message : String(err)}`,
+    );
     process.exitCode = 1;
   });
