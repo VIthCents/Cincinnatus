@@ -183,7 +183,7 @@ export async function runPipeline(options: RunOptions): Promise<RunResult> {
 
   // --- rank ----------------------------------------------------------------
 
-  const { ranked, widenedBeyondRadius, fit } = rankJobs({
+  const { ranked, widenedBeyondRadius, fit, candidates, reachable } = rankJobs({
     jobs: survivors,
     vectors: vectorsByJob,
     profileVector,
@@ -203,6 +203,8 @@ export async function runPipeline(options: RunOptions): Promise<RunResult> {
     embedded: freshlyEncoded.length,
     fit,
     widenedBeyondRadius,
+    candidates,
+    reachable,
   };
 
   await repo.saveRun(

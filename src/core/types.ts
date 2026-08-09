@@ -185,4 +185,8 @@ export interface RunReport {
    * to the user's radius left too few results. Surfaced to the user in words.
    */
   readonly widenedBeyondRadius: boolean;
+  /** Jobs considered for ranking, before the location filter. */
+  readonly candidates: number;
+  /** How many of those were within the user's reach or remote. */
+  readonly reachable: number;
 }

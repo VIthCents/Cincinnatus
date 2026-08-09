@@ -54,6 +54,16 @@ export interface RankOutput {
   /** True when the radius filter was dropped for lack of nearby results. */
   readonly widenedBeyondRadius: boolean;
   readonly fit: FitDistribution | null;
+  /** Every job considered, before the location filter. */
+  readonly candidates: number;
+  /**
+   * How many of those were within reach.
+   *
+   * Reported against `candidates`, never against `ranked`: when the filter is
+   * applied, `ranked` already contains only reachable jobs, so comparing the
+   * two would always print "N of N" and tell the user nothing.
+   */
+  readonly reachable: number;
 }
 
 export function rankJobs(input: RankInput): RankOutput {
@@ -115,5 +125,11 @@ export function rankJobs(input: RankInput): RankOutput {
           max: Math.max(...fits),
         };
 
-  return { ranked, widenedBeyondRadius: widened, fit };
+  return {
+    ranked,
+    widenedBeyondRadius: widened,
+    fit,
+    candidates: scored.length,
+    reachable: nearby.length,
+  };
 }

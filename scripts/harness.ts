@@ -379,11 +379,14 @@ async function main(): Promise<number> {
 
   if (report.widenedBeyondRadius) {
     out(
-      `Not many jobs near ${profile.location?.city ?? "you"}, so this list covers the whole country.`,
+      `Only ${report.reachable} of ${report.candidates} jobs are near ${profile.location?.city ?? "you"} or remote, ` +
+        `so this list covers the whole country.`,
     );
   } else {
-    const reachable = ranked.filter((r) => r.withinReach).length;
-    out(`${reachable} of ${ranked.length} results are near you or remote.`);
+    out(
+      `${report.reachable} of ${report.candidates} jobs are near ${profile.location?.city ?? "you"} or remote. ` +
+        `Showing those.`,
+    );
   }
 
   printRanked(ranked, Number(values.top ?? 25));

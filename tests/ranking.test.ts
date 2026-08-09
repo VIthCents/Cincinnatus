@@ -267,6 +267,33 @@ describe("rankJobs", () => {
     expect(entry?.ageDays).toBeCloseTo(3, 5);
   });
 
+  it("counts reachable jobs against all candidates, not against the filtered list", () => {
+    // When the filter applies, `ranked` already contains only reachable jobs,
+    // so reporting reachable/ranked always prints "N of N" and tells the user
+    // nothing. The honest denominator is everything considered.
+    const jobs = [
+      ...Array.from({ length: 12 }, (_, i) =>
+        job({ id: `near${i}`, location: "Austin, TX", dedupeKey: `n${i}` }),
+      ),
+      ...Array.from({ length: 40 }, (_, i) =>
+        job({ id: `far${i}`, location: "Boston, MA", dedupeKey: `f${i}` }),
+      ),
+    ];
+    const result = rankJobs({
+      jobs,
+      vectors: new Map(),
+      profileVector,
+      profile,
+      now: NOW,
+    });
+
+    expect(result.widenedBeyondRadius).toBe(false);
+    expect(result.candidates).toBe(52);
+    expect(result.reachable).toBe(12);
+    expect(result.ranked).toHaveLength(12);
+    expect(result.reachable).toBeLessThan(result.candidates);
+  });
+
   it("is deterministic for equal scores", () => {
     const jobs = Array.from({ length: 12 }, (_, i) =>
       job({ id: `z${i}`, dedupeKey: `d${i}` }),

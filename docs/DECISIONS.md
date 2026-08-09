@@ -288,6 +288,49 @@ means a board that is sold, renamed, or reassigned fails loudly instead of quiet
 
 ---
 
+## 2026-08-08 — Embedding everything costs 81 seconds, not 10–20 minutes
+
+**Context.** The plan estimated a cold first run at 10–20 minutes, based on a projected 15–40
+documents/sec, and that estimate is what the "embed everything vs. prefilter" decision was made against.
+
+**Measured.** A cold run over 25 sources: 5,514 jobs fetched, 222 duplicates collapsed, **5,292 unique
+job texts embedded, 81.3 seconds wall clock** end to end — roughly 78 docs/sec on this machine with the
+q8-quantized MiniLM on CPU.
+
+**Consequence.** The prefilter the plan held in reserve is unnecessary. `--max-embed` stays as a
+development convenience, not a product default, and there is no recall trade-off to document because
+nothing is being skipped. Fit scores across that run spanned 10.6 to 45.8 with a median of 25.4 — a real
+spread, so the ranking is discriminating rather than being dominated by the freshness term.
+
+---
+
+## 2026-08-08 — The location filter needs rethinking before Phase 3
+
+**Context.** Running the sample profile (Army 88M, Fayetteville NC) surfaced a result-quality problem
+that is not a bug in any single component. The top matches were Senior Program Manager, Recruiter, Sales
+Operations Manager — nothing a truck driver would apply to.
+
+The corpus is not the problem. It contains 269 technician, 177 mechanic, 104 supply, 46 maintenance and
+15 machinist postings. But only **21 of 5,514 jobs are physically in North Carolina**, and those
+blue-collar roles are on-site at coastal facilities. The 318 "reachable" results are almost entirely the
+389 remote postings, and remote work at defense-tech employers is overwhelmingly corporate and
+engineering.
+
+So the filter removed exactly the jobs that fit and kept the ones that did not, and the widening rule
+never fired because 318 comfortably exceeds the threshold of 10.
+
+**Decision (Phase 1).** Report it honestly rather than paper over it. The harness now prints the
+reachable count against _all_ candidates ("318 of 5,292 jobs are near you or remote") instead of against
+the already-filtered list, which previously always read "318 of 318" and told the user nothing.
+
+**Consequence / open for Phase 3.** A count threshold is the wrong trigger for widening. Better options,
+in rough order of preference: widen when the reachable set's _best fit_ is materially worse than the
+nationwide best fit; or drop the hard filter and sort with reach as a scoring term rather than a gate.
+Either is a product decision, and the user has already ruled once on this behaviour, so it is flagged
+rather than changed unilaterally.
+
+---
+
 ## 2026-08-08 — First-run cost and location filtering
 
 **Context.** Two product choices that the SPEC leaves open and that materially change how the app feels.
