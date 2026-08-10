@@ -1,5 +1,5 @@
 import { buildQuery } from "../net/allowlist.ts";
-import { makeDedupeKey, makeJobId } from "../pipeline/normalize.ts";
+import { htmlToText, makeDedupeKey, makeJobId } from "../pipeline/normalize.ts";
 import { normalizeUsLocation } from "../pipeline/states.ts";
 import type { Job, SalaryInterval } from "../types.ts";
 import {
@@ -33,17 +33,18 @@ interface LeverSalaryRange {
 interface LeverPosting {
   readonly id?: string;
   /** Lever calls the job title `text`. */
-  readonly text?: string;
+  readonly text?: string | null;
   readonly descriptionPlain?: string;
+  readonly lists?: readonly { readonly text?: string; readonly content?: string }[];
   readonly descriptionBodyPlain?: string;
   readonly additionalPlain?: string;
   readonly createdAt?: number;
   readonly hostedUrl?: string;
   readonly applyUrl?: string;
-  readonly workplaceType?: string;
+  readonly workplaceType?: string | null;
   readonly salaryRange?: LeverSalaryRange;
   readonly categories?: {
-    readonly location?: string;
+    readonly location?: string | null;
     readonly commitment?: string;
     readonly department?: string;
     readonly team?: string;
@@ -141,9 +142,22 @@ export function normalizeLeverPosting(
   const postedValid =
     typeof posted === "number" && Number.isFinite(posted) && posted > 0;
 
+  // NOT descriptionPlain. Measured across one 434-posting board: it already
+  // contains descriptionBodyPlain on 402 of them, and it leads with
+  // openingPlain — 525 characters of company blurb IDENTICAL on all 434. With
+  // a 1,000-character embedding budget that boilerplate would be most of the
+  // vector, and every posting on the board would look alike. It is the same
+  // collapse stripContentIntro exists to prevent on Greenhouse.
+  //
+  // `lists` is where the job actually is — the responsibilities and the
+  // qualifications, averaging 4,708 characters — and it was being discarded.
   const description = [
-    posting.descriptionPlain,
     posting.descriptionBodyPlain,
+    ...(posting.lists ?? []).map((list) =>
+      [list.text ?? "", list.content === undefined ? "" : htmlToText(list.content)]
+        .filter((part) => part.trim() !== "")
+        .join(" "),
+    ),
     posting.additionalPlain,
   ]
     .filter((part): part is string => part !== undefined && part.trim() !== "")

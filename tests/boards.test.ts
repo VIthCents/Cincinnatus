@@ -108,6 +108,7 @@ describe("Ashby postings", () => {
     location: "San Mateo, California, United States",
     publishedAt: "2026-06-04T17:36:23.056+00:00",
     isRemote: false,
+    workplaceType: "OnSite",
     jobUrl: "https://jobs.ashbyhq.com/skydio/xyz",
     descriptionPlain: "Guard the site.",
     shouldDisplayCompensationOnJobPostings: true,
@@ -173,7 +174,118 @@ describe("Ashby postings", () => {
   });
 
   it("says nothing about remote when the board said nothing", () => {
-    const { isRemote: _r, ...silent } = base;
+    const { workplaceType: _w, ...silent } = base;
     expect(normalizeAshbyPosting(silent, "Skydio", ctx)?.remote).toBeNull();
+  });
+
+  /**
+   * Measured: isRemote is true for all 64 of Skydio hybrid postings, every one
+   * in San Mateo, and 4 of Saronic. It means "not strictly on site".
+   *
+   * remote === true short-circuits isWithinReach, so trusting it would put a
+   * California office job into a Fayetteville veteran list as work they could
+   * take from home — a fact nobody stated, arriving through the job list.
+   */
+  it("does not call a hybrid office job remote, whatever isRemote says", () => {
+    const job = normalizeAshbyPosting(
+      { ...base, isRemote: true, workplaceType: "Hybrid" },
+      "Skydio",
+      ctx,
+    );
+    expect(job?.remote).toBe(false);
+  });
+
+  it("reads workplaceType Remote as remote", () => {
+    expect(
+      normalizeAshbyPosting({ ...base, workplaceType: "Remote" }, "Skydio", ctx)
+        ?.remote,
+    ).toBe(true);
+  });
+});
+
+describe("what Lever text actually gets embedded", () => {
+  /**
+   * Measured on one 434-posting board: descriptionPlain already contains
+   * descriptionBodyPlain on 402 of them and leads with openingPlain — 525
+   * characters of company blurb IDENTICAL across all 434. Against a
+   * 1,000-character embedding budget that boilerplate would be most of the
+   * vector and every posting on the board would look alike, which is the
+   * collapse stripContentIntro exists to prevent on Greenhouse. Meanwhile
+   * `lists` — the responsibilities and qualifications — was discarded.
+   */
+  const posting = {
+    id: "abc",
+    text: "Maintenance Technician",
+    openingPlain: "SHARED COMPANY BLURB ".repeat(20),
+    descriptionPlain: "SHARED COMPANY BLURB ".repeat(20) + "We keep aircraft flying.",
+    descriptionBodyPlain: "We keep aircraft flying.",
+    lists: [
+      { text: "What you will do:", content: "<li>Service hydraulic systems</li>" },
+      { text: "Required qualifications:", content: "<li>A&P licence</li>" },
+    ],
+    additionalPlain: "Benefits are good.",
+    createdAt: 1_779_920_530_389,
+    hostedUrl: "https://jobs.lever.co/x/abc",
+    categories: { location: "Dallas, Texas" },
+  };
+
+  it("keeps the requirements and drops the blurb", () => {
+    const text = normalizeLeverPosting(posting, "Shield AI", ctx)!.descriptionText;
+    expect(text).toContain("Service hydraulic systems");
+    expect(text).toContain("A&P licence");
+    expect(text).not.toContain("SHARED COMPANY BLURB");
+  });
+
+  it("does not say the body twice", () => {
+    const text = normalizeLeverPosting(posting, "Shield AI", ctx)!.descriptionText;
+    expect(text.split("We keep aircraft flying.").length - 1).toBe(1);
+  });
+});
+
+describe("fields the API sends as null, not absent", () => {
+  /**
+   * Ashby sends an explicit JSON null for workplaceType. A guard that only
+   * checked `undefined` threw on it and took out Saronic, Skydio and Form
+   * Energy entirely — 548 jobs — surfacing as one quiet source-error line
+   * while every other board succeeded.
+   *
+   * TypeScript did not catch it because the interface said `string`, which is
+   * what the payload looked like in the sample that got read.
+   */
+  const nullish = {
+    id: "n1",
+    title: "Technician",
+    location: null,
+    publishedAt: null,
+    workplaceType: null,
+    descriptionPlain: null,
+    jobUrl: "https://jobs.ashbyhq.com/x/n1",
+  };
+
+  it("survives an Ashby posting whose optional fields are null", () => {
+    const job = normalizeAshbyPosting(nullish, "Saronic", ctx);
+    expect(job).not.toBeNull();
+    expect(job?.remote).toBeNull();
+    expect(job?.location).toBeNull();
+    expect(job?.postedAtIsEstimated).toBe(true);
+    expect(job?.descriptionText).toBe("");
+  });
+
+  it("survives a Lever posting whose optional fields are null", () => {
+    const job = normalizeLeverPosting(
+      {
+        id: "n2",
+        text: "Driver",
+        workplaceType: null,
+        categories: { location: null },
+        createdAt: 1_779_920_530_389,
+        hostedUrl: "https://jobs.lever.co/x/n2",
+      },
+      "Shield AI",
+      ctx,
+    );
+    expect(job).not.toBeNull();
+    expect(job?.remote).toBeNull();
+    expect(job?.location).toBeNull();
   });
 });

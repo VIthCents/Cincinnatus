@@ -34,14 +34,16 @@ interface AshbyCompensationComponent {
 
 interface AshbyPosting {
   readonly id?: string;
-  readonly title?: string;
-  readonly location?: string;
-  readonly publishedAt?: string;
+  readonly title?: string | null;
+  readonly location?: string | null;
+  readonly publishedAt?: string | null;
   readonly isRemote?: boolean;
+  /** "Remote" | "OnSite" | "Hybrid" — the one that means what it says. */
+  readonly workplaceType?: string | null;
   readonly isListed?: boolean;
   readonly jobUrl?: string;
   readonly applyUrl?: string;
-  readonly descriptionPlain?: string;
+  readonly descriptionPlain?: string | null;
   readonly employmentType?: string;
   readonly department?: string;
   readonly team?: string;
@@ -146,6 +148,20 @@ function readSalary(posting: AshbyPosting): {
   };
 }
 
+/**
+ * Hybrid is not remote. It is an office job with some days at home, and a
+ * person judging whether they can take it from another state needs it to say
+ * so. Absent stays null and is never coerced to false.
+ */
+function workplaceRemote(workplaceType: string | null | undefined): boolean | null {
+  // `null`, not just absent. Ashby sends an explicit JSON null here, and a
+  // guard that only checked `undefined` threw on it — taking out Saronic,
+  // Skydio and Form Energy entirely, 548 jobs, reported as nothing worse than
+  // a source error line.
+  if (workplaceType == null || workplaceType.trim() === "") return null;
+  return workplaceType.trim().toLowerCase() === "remote";
+}
+
 export function normalizeAshbyPosting(
   posting: AshbyPosting,
   companyLabel: string,
@@ -161,8 +177,9 @@ export function normalizeAshbyPosting(
       ? null
       : normalizeUsLocation(rawLocation);
 
-  const posted =
-    posting.publishedAt === undefined ? null : Date.parse(posting.publishedAt);
+  // `== null` covers both the absent field and the explicit JSON null, which
+  // is the distinction that just cost three whole boards.
+  const posted = posting.publishedAt == null ? null : Date.parse(posting.publishedAt);
   const postedValid = posted !== null && !Number.isNaN(posted);
 
   const pay = readSalary(posting);
@@ -174,9 +191,17 @@ export function normalizeAshbyPosting(
     title,
     company: companyLabel,
     location,
-    // Ashby states this outright, so it is reported rather than inferred.
-    // Absent stays null — false must mean "the employer said on site".
-    remote: typeof posting.isRemote === "boolean" ? posting.isRemote : null,
+    // `workplaceType`, NOT `isRemote`. Measured: isRemote is true for all 64 of
+    // Skydio's "Hybrid" postings, every one of them in San Mateo, and for 4 of
+    // Saronic's. It means "not strictly on site", which is not what this field
+    // means to a person reading a card.
+    //
+    // The consequence is worse than a wrong label. `remote === true`
+    // short-circuits isWithinReach, so a hybrid office job in California would
+    // enter a Fayetteville veteran's list as reachable work they could take
+    // from home. That is a fact nobody stated, arriving through the job list —
+    // the same failure as Adzuna's predicted salaries.
+    remote: workplaceRemote(posting.workplaceType),
     salaryMin: pay.min,
     salaryMax: pay.max,
     salaryCurrency: pay.currency,
