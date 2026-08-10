@@ -3,25 +3,9 @@ import type { Profile } from "../../core/types.ts";
 
 /** Plain-words rendering shared by cards and lists. */
 
-export type MatchLevel = "fair" | "good" | "strong";
-
-/**
- * Three levels and three words, per the design system's matching guideline:
- * the badge reads fitScore (never finalScore, which decays with age), and a
- * person never sees the number.
- *
- * The bands are NOT the guideline's 35/55/75. fitScore here is
- * `clamp(cosine,0,1) × 100`, and raw MiniLM cosines between a short profile
- * and a long posting cluster around 0.1–0.5 (see core/pipeline/score.ts). On
- * that distribution a 75 floor for "strong" would never fire and a 35 floor
- * would hide most of the list. These bands are the same ones the ranking has
- * been calibrated against; see docs/DECISIONS.md.
- */
-export function matchLevel(fit: number): MatchLevel {
-  if (fit >= 55) return "strong";
-  if (fit >= 40) return "good";
-  return "fair";
-}
+// The badge bands live in core so the app and the harness cannot drift
+// apart. What they are measured to mean is documented there.
+export { matchLevel, MATCH_WORDS, type MatchLevel } from "../../core/pipeline/match.ts";
 
 export function ageWords(days: number): string {
   const whole = Math.round(days);

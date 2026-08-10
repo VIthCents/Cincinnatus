@@ -1,4 +1,4 @@
-import type { MatchLevel } from "../app/format.ts";
+import { MATCH_WORDS, type MatchLevel } from "../app/format.ts";
 
 /**
  * Ported from the Cincinnatus Design System
@@ -10,11 +10,6 @@ import type { MatchLevel } from "../app/format.ts";
  */
 
 const CHEVRONS: Record<MatchLevel, number> = { fair: 1, good: 2, strong: 3 };
-const WORDS: Record<MatchLevel, string> = {
-  fair: "Fair match",
-  good: "Good match",
-  strong: "Strong match",
-};
 
 function Chevron({ on }: { on: boolean }) {
   return (
@@ -56,7 +51,7 @@ export function MatchBadge({
         <Chevron on={filled >= 2} />
         <Chevron on={filled >= 1} />
       </span>
-      <span className="cn-match__word">{WORDS[level]}</span>
+      <span className="cn-match__word">{MATCH_WORDS[level]}</span>
     </span>
   );
 }

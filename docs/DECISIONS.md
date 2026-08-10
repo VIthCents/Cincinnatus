@@ -799,3 +799,50 @@ Floors ratcheted accordingly (0.55 / 0.70), per-set because the sets are differe
 **Rejected:** a seniority penalty ("Senior", "Staff", "Manager", …). It fired on half the CDL set's
 judge-approved jobs — an 8-year NCO legitimately walks into supervisory roles — and NDCG confirmed it
 cost more than it bought on that profile. The word "senior" is not a gate; a J.D. is.
+
+---
+
+## 2026-08-10 — The badge bands say what they are measured to mean
+
+**Context.** `matchLevel` existed twice — once in `ui/app/format.ts`, once copied by hand into
+`scripts/harness.ts` — with bands (55/40) that had been chosen against raw cosines before the reach
+adjustment moved the whole distribution. Two copies of a number that must agree is how they stop
+agreeing, and neither copy had ever been checked against a labelled job.
+
+**What the measurement actually said.** Over 88 labelled jobs across both profiles, `fitScore`
+distributes like this:
+
+| label          | n   | median | range          |
+| -------------- | --- | ------ | -------------- |
+| 2 strong match | 7   | 64.0   | 52.0 – 70.6    |
+| 1 worth a look | 26  | 54.9   | 14.7 – 72.7    |
+| 0 not for them | 55  | 37.5   | 5.3 – **70.4** |
+
+Those ranges overlap badly. One job every judge said was out of reach scores 70.4, above most of the
+genuinely strong ones. **No threshold produces a "Strong match" bucket that is mostly label 2** — the
+best any cut achieves is 26% against an 8% base rate. That is the honest finding, and it is not fixed by
+choosing nicer numbers.
+
+What fit _can_ separate is "worth your time" from "not for you": at 60 and above, 94% of jobs are label
+1 or 2; at 48 and above, 57%; below that it is mostly noise.
+
+**Decision.** One source of truth in `core/pipeline/match.ts`, with bands set to those measurements
+rather than to round numbers: **STRONG ≥ 60, GOOD ≥ 48, FAIR below**. The UI, the harness and
+`MatchBadge` all import it. The doc comment carries the table above, so the next person to move a band
+has to argue with data.
+
+The gate is on the _promise_, not the numbers — `tests/rankEval.test.ts` asserts that the Strong bucket
+is ≥90% jobs a judge said were gettable, that Good beats a coin toss and is strictly worse than Strong,
+and that the badge reads `fitScore` and not `finalScore`. Thresholds may move freely as long as those
+stay true.
+
+**Consequence, stated plainly: the CDL veteran now sees no strong matches at all.** Nothing in that
+golden set reaches 60. That is deliberate and it is asserted by a test. The reachable corpus contains
+almost no driving work, so "no strong matches" is the truth of that corpus; promoting the best of a bad
+list to make the screen look decisive would be lying to someone about to spend an evening on an
+application. It is also one more piece of evidence that **supply, not ranking, is now the binding
+constraint** for this audience.
+
+**Also.** The infantry golden set is now labelled and gating (NDCG@10 floor 0.70, measured 0.745; CDL
+floor 0.55, measured 0.561). Its labels are a single careful pass, not three independent judges like the
+CDL set — recorded in the test file so its floors get proportionally less reverence.

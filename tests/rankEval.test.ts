@@ -1,6 +1,14 @@
 import { readFileSync, existsSync } from "node:fs";
 import { describe, it, expect } from "vitest";
 import { rankJobs } from "../src/core/pipeline/rank.ts";
+import { reachAdjustedSimilarity } from "../src/core/pipeline/reach.ts";
+import { fitFromSimilarity } from "../src/core/pipeline/score.ts";
+import {
+  GOOD_MATCH_FIT,
+  STRONG_MATCH_FIT,
+  matchLevel,
+} from "../src/core/pipeline/match.ts";
+import { FRESHNESS_FLOOR } from "../src/core/config.ts";
 import { parseProfile } from "../src/core/profile/parse.ts";
 import type { Job, Profile, RankedJob } from "../src/core/types.ts";
 
@@ -202,4 +210,64 @@ describe("ranking quality on labelled real jobs", () => {
       expect(lastTwo).toBeLessThan(set.lastStrongWithin);
     });
   }
+});
+
+/**
+ * The badge is a promise to someone deciding how to spend an evening. These
+ * assertions are that promise, measured — not the threshold numbers, which are
+ * free to move as long as what the words mean stays true.
+ *
+ * Pooled across both profiles, because a band that only holds for one veteran
+ * is a band tuned to that veteran.
+ */
+describe("what the match badge promises", () => {
+  const pooled = SETS.flatMap((set) => {
+    const profile = profileOf(set.profile);
+    return load(set.file).map((c) => ({
+      label: c.label ?? 0,
+      fit: fitFromSimilarity(reachAdjustedSimilarity(c.cosine, c.title, profile)),
+    }));
+  });
+
+  it("has enough labelled jobs to say anything", () => {
+    expect(pooled.length).toBeGreaterThanOrEqual(80);
+  });
+
+  it("Strong match means a job she could really get", () => {
+    const strong = pooled.filter((r) => matchLevel(r.fit) === "strong");
+    expect(strong.length).toBeGreaterThan(0);
+    const gettable = strong.filter((r) => r.label >= 1).length / strong.length;
+    expect(gettable).toBeGreaterThanOrEqual(0.9);
+  });
+
+  it("Good match beats a coin toss, and is worse than Strong", () => {
+    const good = pooled.filter((r) => matchLevel(r.fit) === "good");
+    const strong = pooled.filter((r) => matchLevel(r.fit) === "strong");
+    const rate = (rs: typeof pooled) =>
+      rs.filter((r) => r.label >= 1).length / rs.length;
+    expect(good.length).toBeGreaterThan(0);
+    expect(rate(good)).toBeGreaterThanOrEqual(0.5);
+    // If Good were as good as Strong the badge would carry no information.
+    expect(rate(good)).toBeLessThan(rate(strong));
+  });
+
+  it("never promotes the best of a bad list", () => {
+    // Absolute bands, not quartiles. The CDL corpus genuinely contains almost
+    // no driving work, so that veteran should see no strong matches — an empty
+    // Strong bucket is the truth of that corpus, not a bug to paper over.
+    const cdlProfile = profileOf("profile.sample.json");
+    const cdl = load("cdl").map((c) =>
+      fitFromSimilarity(reachAdjustedSimilarity(c.cosine, c.title, cdlProfile)),
+    );
+    expect(cdl.every((f) => matchLevel(f) !== "strong")).toBe(true);
+  });
+
+  it("reads fitScore, so a job does not change badge as it ages", () => {
+    // finalScore decays; fitScore does not. Guards against anyone wiring the
+    // badge to the wrong number.
+    expect(matchLevel(STRONG_MATCH_FIT)).toBe("strong");
+    expect(matchLevel(STRONG_MATCH_FIT * FRESHNESS_FLOOR)).not.toBe("strong");
+    expect(matchLevel(GOOD_MATCH_FIT)).toBe("good");
+    expect(matchLevel(GOOD_MATCH_FIT - 0.1)).toBe("fair");
+  });
 });

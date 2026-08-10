@@ -18,6 +18,7 @@ import type { Source } from "../src/core/sources/source.ts";
 import type { Llm, ProgressEvent, Reporter } from "../src/core/ports.ts";
 import type { Job, Profile, RankedJob, WatchlistEntry } from "../src/core/types.ts";
 import * as repo from "../src/core/db/repo.ts";
+import { MATCH_WORDS, matchLevel } from "../src/core/pipeline/match.ts";
 
 import { analyzeResume } from "../src/core/documents/analyze.ts";
 import { parseResume } from "../src/core/documents/parseResume.ts";
@@ -258,17 +259,6 @@ function ageLabel(days: number): string {
   return `${whole} days ago`;
 }
 
-/**
- * The same three words and the same bands the app shows (ui/app/format.ts).
- * The harness prints the number alongside because it is a developer tool; the
- * app never does.
- */
-function matchLabel(fit: number): string {
-  if (fit >= 55) return "Strong match";
-  if (fit >= 40) return "Good match";
-  return "Fair match";
-}
-
 function printRanked(ranked: readonly RankedJob[], top: number): void {
   out();
   out(`Top ${Math.min(top, ranked.length)} of ${ranked.length} jobs`);
@@ -280,7 +270,7 @@ function printRanked(ranked: readonly RankedJob[], top: number): void {
     out(`${String(i + 1).padStart(2)}. ${r.job.title}`);
     out(`    ${r.job.company}${r.job.location === null ? "" : ` — ${r.job.location}`}`);
     out(
-      `    ${matchLabel(r.fitScore)} (fit ${r.fitScore.toFixed(1)}) · posted ${ageLabel(r.ageDays)}` +
+      `    ${MATCH_WORDS[matchLevel(r.fitScore)]} (fit ${r.fitScore.toFixed(1)}) · posted ${ageLabel(r.ageDays)}` +
         `${r.job.postedAtIsEstimated ? " (estimated)" : ""} · score ${r.finalScore.toFixed(2)}` +
         `${salary === "" ? "" : ` · ${salary}`}`,
     );
