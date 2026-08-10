@@ -1,6 +1,7 @@
 import type { Clock, Hasher, Http, HttpResponse, Reporter } from "../ports.ts";
 import type { Job, SourceId } from "../types.ts";
 import { BACKOFF_BASE_MS, BACKOFF_MAX_MS, MAX_RETRIES } from "../config.ts";
+import { redactCredentials } from "../net/redact.ts";
 
 /** ETag / Last-Modified carried between runs. */
 export interface ConditionalState {
@@ -78,7 +79,7 @@ export function toPlainMessage(err: unknown, label: string): string {
     if (err.status >= 500) {
       return `${label} is having trouble on their end. We will try again on the next search.`;
     }
-    return `${label} refused the request (error ${err.status}).`;
+    return redactCredentials(`${label} refused the request (error ${err.status}).`);
   }
 
   const message = err instanceof Error ? err.message : String(err);
@@ -94,7 +95,9 @@ export function toPlainMessage(err: unknown, label: string): string {
   if (/JSON|Unexpected token/i.test(message)) {
     return `${label} sent something we could not read. Their API may have changed.`;
   }
-  return `${label} failed: ${message}`;
+  // Adzuna's credentials live in its query string, so a raw message can
+  // carry them into persisted run history and the on-screen banner.
+  return redactCredentials(`${label} failed: ${message}`);
 }
 
 // -----------------------------------------------------------------------------

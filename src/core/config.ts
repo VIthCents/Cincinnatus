@@ -110,6 +110,11 @@ export const REQUEST_DELAY_MS: Readonly<Record<string, number>> = {
   "api.lever.co": 1000,
   "api.ashbyhq.com": 350,
   "data.usajobs.gov": 500,
+
+  // Adzuna publishes a hard ceiling of 25 requests per minute in its terms
+  // (60000/25 = 2400ms). The margin covers clock skew and the fact that
+  // Adzuna counts the request, not the response.
+  "api.adzuna.com": 2600,
 };
 
 export const DEFAULT_REQUEST_DELAY_MS = 1000;
@@ -174,3 +179,37 @@ export function estimateCostUsd(
   if (price === undefined) return 0;
   return (inputTokens * price.input + outputTokens * price.output) / 1_000_000;
 }
+
+/**
+ * Adzuna's quota, and how this app stays inside it.
+ *
+ * Their terms state four ceilings: 25 requests per minute, 250 per day,
+ * 1,000 per week and 2,500 per month. A `Source` is handed no database and
+ * cannot count its own calls across runs, so the budget is enforced by
+ * construction instead: at most TERMS x PAGES requests per search.
+ *
+ * 5 x 2 = 10 per search. The scheduler defaults to every 6 hours, so 4
+ * scheduled searches plus a few manual ones is ~50/day and ~1,500/month —
+ * inside every ceiling with room for the user pressing Search now.
+ *
+ * Raising either number risks the monthly cap, and running out means Adzuna
+ * goes quiet two thirds of the way through a month with no way for the app
+ * to explain why. Do the arithmetic before changing them.
+ */
+export const ADZUNA_MAX_TERMS = 5;
+export const ADZUNA_MAX_PAGES = 2;
+
+/** Adzuna caps this at 50 regardless of what is requested. */
+export const ADZUNA_RESULTS_PER_PAGE = 50;
+
+/**
+ * How many of one employer's postings for the same role may sit in the top
+ * of the list before the rest are demoted below everything else.
+ *
+ * Three, measured: the first live Adzuna run put nine identical
+ * 'CDL A Delivery Truck Driver' postings from one company in the top twelve,
+ * one per North Carolina town. They are all real and all nearby, so dropping
+ * them would be wrong — but a list that shows one job nine times reads as
+ * padded, and buries the variety the person actually needs to see.
+ */
+export const MAX_PER_EMPLOYER_ROLE = 3;

@@ -7,6 +7,8 @@ import {
   SECRET_ANTHROPIC_KEY,
   SECRET_USAJOBS_EMAIL,
   SECRET_USAJOBS_KEY,
+  SECRET_ADZUNA_APP_ID,
+  SECRET_ADZUNA_APP_KEY,
   getSecret,
 } from "../../tauri/secrets.ts";
 
@@ -19,6 +21,7 @@ import { loadRankedFromDb } from "../../core/pipeline/loadRanked.ts";
 import { buildSearchTerms } from "../../core/pipeline/queries.ts";
 import { createGreenhouseSource } from "../../core/sources/greenhouse.ts";
 import { createUsaJobsSource } from "../../core/sources/usajobs.ts";
+import { buildAdzunaSearchUrl, createAdzunaSource } from "../../core/sources/adzuna.ts";
 import type { Source } from "../../core/sources/source.ts";
 import { markRunNow } from "../../core/app/schedule.ts";
 import { recordSpend } from "../../core/app/spend.ts";
@@ -92,6 +95,13 @@ export async function hasUsaJobsKey(): Promise<boolean> {
   );
 }
 
+export async function hasAdzunaKeys(): Promise<boolean> {
+  return (
+    (await getSecret(SECRET_ADZUNA_APP_ID)) !== null &&
+    (await getSecret(SECRET_ADZUNA_APP_KEY)) !== null
+  );
+}
+
 interface StarterWatchlistFile {
   boards: {
     ats: WatchlistEntry["ats"];
@@ -147,6 +157,20 @@ async function buildSources(profile: Profile): Promise<Source[]> {
       }),
     );
   }
+  const adzunaId = await getSecret(SECRET_ADZUNA_APP_ID);
+  const adzunaKey = await getSecret(SECRET_ADZUNA_APP_KEY);
+  if (adzunaId !== null && adzunaKey !== null) {
+    const terms = buildSearchTerms(profile);
+    sources.push(
+      createAdzunaSource({
+        auth: { appId: adzunaId, appKey: adzunaKey },
+        keywords: terms.titles,
+        locationName: terms.locationName,
+        radiusMiles: terms.radiusMiles,
+      }),
+    );
+  }
+
   return sources;
 }
 
@@ -229,6 +253,48 @@ export async function validateUsaJobsKey(
     return {
       ok: false,
       message: "Could not reach USAJobs. Check your internet connection and try again.",
+    };
+  }
+}
+
+/**
+ * One tiny real search, so a wrong paste is caught here rather than showing
+ * up as a silently shorter job list six hours later.
+ */
+export async function validateAdzunaKeys(
+  appId: string,
+  appKey: string,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  try {
+    const response = await tauriHttp.get({
+      url: buildAdzunaSearchUrl(
+        {
+          auth: { appId, appKey },
+          keywords: [],
+          locationName: null,
+          radiusMiles: null,
+        },
+        "driver",
+        1,
+      ),
+      headers: {},
+    });
+    if (response.status === 200) return { ok: true };
+    if (response.status === 401 || response.status === 403) {
+      return {
+        ok: false,
+        message:
+          "Those numbers did not work. Copy them again from the Adzuna page and paste them here.",
+      };
+    }
+    return {
+      ok: false,
+      message: `Adzuna answered in an unexpected way (code ${response.status}). Try again in a bit.`,
+    };
+  } catch {
+    return {
+      ok: false,
+      message: "Could not reach Adzuna. Check your internet connection.",
     };
   }
 }

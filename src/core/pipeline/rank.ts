@@ -1,4 +1,9 @@
-import { MIN_FIT_FOR_WIDENING, MIN_RESULTS_BEFORE_WIDENING } from "../config.ts";
+import {
+  MAX_PER_EMPLOYER_ROLE,
+  MIN_FIT_FOR_WIDENING,
+  MIN_RESULTS_BEFORE_WIDENING,
+} from "../config.ts";
+import { normalizeCompany, normalizeTitle } from "./normalize.ts";
 import { dot } from "../embed/vector.ts";
 import type { FitDistribution, Job, Profile, RankedJob } from "../types.ts";
 import {
@@ -67,6 +72,36 @@ export interface RankOutput {
   readonly reachable: number;
 }
 
+/**
+ * Stop one employer's identical requisition from filling the screen.
+ *
+ * Measured on the first live Adzuna run: nine of the top twelve jobs were
+ * "CDL A Delivery Truck Driver" at Mclane, in nine different North Carolina
+ * towns. Every one is a real, distinct, genuinely nearby posting — dedupe is
+ * right not to collapse them — but a veteran scrolling that sees one job nine
+ * times and a list that looks padded.
+ *
+ * So nothing is dropped, only demoted: the best few of each employer-and-role
+ * group keep their earned position, and the rest move below everything else in
+ * their existing order. Someone who scrolls far enough still finds the branch
+ * nearest them, and the top of the list shows them a choice.
+ */
+function spreadEmployers(ranked: readonly RankedJob[]): RankedJob[] {
+  const head: RankedJob[] = [];
+  const overflow: RankedJob[] = [];
+  const seen = new Map<string, number>();
+
+  for (const entry of ranked) {
+    const key = `${normalizeCompany(entry.job.company)}|${normalizeTitle(entry.job.title)}`;
+    const count = seen.get(key) ?? 0;
+    seen.set(key, count + 1);
+    if (count < MAX_PER_EMPLOYER_ROLE) head.push(entry);
+    else overflow.push(entry);
+  }
+
+  return [...head, ...overflow];
+}
+
 export function rankJobs(input: RankInput): RankOutput {
   const { jobs, vectors, profileVector, profile, now } = input;
 
@@ -131,7 +166,7 @@ export function rankJobs(input: RankInput): RankOutput {
   // plentiful local list and a useless one are indistinguishable by length.
   const nearbyWorthwhile = nearby.filter((r) => r.fitScore >= MIN_FIT_FOR_WIDENING);
   const widened = nearbyWorthwhile.length < MIN_RESULTS_BEFORE_WIDENING;
-  const ranked = widened ? [...scored].sort(byScore) : nearby;
+  const ranked = spreadEmployers(widened ? [...scored].sort(byScore) : nearby);
 
   const fits = ranked.map((r) => r.fitScore);
   const fit: FitDistribution | null =

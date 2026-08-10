@@ -11,6 +11,8 @@ import { save } from "@tauri-apps/plugin-dialog";
 export const SECRET_ANTHROPIC_KEY = "anthropic_api_key";
 export const SECRET_USAJOBS_KEY = "usajobs_api_key";
 export const SECRET_USAJOBS_EMAIL = "usajobs_user_agent_email";
+export const SECRET_ADZUNA_APP_ID = "adzuna_app_id";
+export const SECRET_ADZUNA_APP_KEY = "adzuna_app_key";
 
 export async function getSecret(name: string): Promise<string | null> {
   const value = await invoke<string | null>("get_secret", { name });

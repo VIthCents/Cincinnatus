@@ -846,3 +846,102 @@ constraint** for this audience.
 **Also.** The infantry golden set is now labelled and gating (NDCG@10 floor 0.70, measured 0.745; CDL
 floor 0.55, measured 0.561). Its labels are a single careful pass, not three independent judges like the
 CDL set — recorded in the test file so its floors get proportionally less reverence.
+
+---
+
+## 2026-08-10 — Adzuna: the supply fix, and what it costs
+
+**Context.** Two profiles measured against the same 5,700-job corpus told the same story from
+opposite ends: the infantry profile got a genuinely good list, and the CDL driver got nothing she
+could apply to — no strong matches at all, which the badge bands now assert as a test. Ranking was
+never her problem. The reachable employer boards carry coastal software and aerospace; they do not
+carry driving. One Adzuna query returns **1,970 driving jobs within 50 miles of Fayetteville**.
+
+**Decision.** Adzuna ships as an **optional, keyed** source. Job search still works with zero keys
+(constraint 6), and everything below follows from measurement rather than from their docs, which are
+thin.
+
+### What the live API actually does
+
+|                      | Finding                                                                                                     |
+| -------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `results_per_page`   | Caps at **50** however many you ask for                                                                     |
+| Page number          | A **path segment**, not a query parameter                                                                   |
+| Conditional requests | **None** — no ETag, no Last-Modified, no cache-control. `newState` is always null                           |
+| `distance`           | Documented in km; behaves loosely — Raleigh (60 mi) appears at `distance=40`. A hint, not our radius filter |
+| End of results       | **410 Gone**, which is an end condition and not a failure                                                   |
+| Rate limits          | **25/min, 250/day, 1,000/week, 2,500/month**, from their ToS                                                |
+
+### Three things that would have shipped as bugs
+
+1. **Location would have silently broken the whole feature.** `isWithinReach` matches the profile's
+   _two-letter_ state with a word boundary. Adzuna's `display_name` is `"Haymount, Cumberland County"` —
+   no state at all. Every North Carolina job would have been "outside your area" for every North
+   Carolinian who does not live in that exact town, and the failure hides itself: with nothing counting
+   as nearby, ranking widens nationwide and reports "only N jobs are near you", a plausible sentence
+   describing a bug. Fixed with `pipeline/states.ts`, which builds `"City, ST"` from `area[]` and
+   returns null rather than guessing a state it cannot resolve.
+
+2. **`salary_is_predicted` is the STRING `"0"`/`"1"`, and 47 of every 50 results are predicted.** A
+   natural `if (raw.salary_is_predicted)` is truthy for `"0"` and drops every real salary; the inverse
+   keeps every guess. We drop salary from Adzuna **entirely** — not just the predicted ones — because
+   Adzuna ships no pay-interval field and annualises everything itself, so an hourly wage would be
+   rendered "$X a year" in the app's own voice. "Pay not listed" is the true sentence: Adzuna did not
+   tell us what the employer stated, only what Adzuna computed. Constraint 4 does not stop at the
+   documents.
+
+3. **Credentials would have been written into the user's own run history.** Adzuna authenticates by
+   query string, and this codebase deliberately treats errors as data — `SourceOutcome.error` is
+   persisted by `saveRun` and rendered in the Opportunities banner. `net/redact.ts` now strips
+   `app_id`/`app_key` at both funnels (`toPlainMessage`, the allowlist errors).
+
+### Staying inside the quota by construction
+
+A `Source` is handed no database and cannot count calls across runs, so the budget cannot be enforced
+at runtime. Instead it is bounded structurally: `ADZUNA_MAX_TERMS (5) × ADZUNA_MAX_PAGES (2)` = 10
+requests per search, ~1,500/month at eight searches a day — inside every ceiling. `REQUEST_DELAY_MS`
+gains `api.adzuna.com: 2600` (their limit is 25/min; the default 1,000 ms would have been 60/min and
+the first run would have 429'd). 429 is **terminal, not retried**: a per-minute rejection needs a
+minute to clear and a daily one never clears within a run, so retrying only spends more of a quota
+that is already gone. A failure after the first success returns the jobs already paid for instead of
+throwing them away. All of this is pinned by tests, including one that does the monthly arithmetic.
+
+### One employer cannot fill the screen
+
+The first live run put **nine identical "CDL A Delivery Truck Driver" postings from Mclane in the top
+twelve**, one per North Carolina town. Each is real, distinct and genuinely nearby, so dedupe is right
+not to collapse them — but a person scrolling sees one job nine times and a list that looks padded.
+`spreadEmployers` demotes rather than drops: the best `MAX_PER_EMPLOYER_ROLE` (3) of each
+employer-and-role group keep their earned position and the rest move below everything else in order,
+so someone who scrolls still finds the branch nearest them. This applies to every source, not just
+Adzuna.
+
+### Honesty obligations
+
+Adzuna's terms require each displayed advert to be labelled "Jobs by Adzuna" with links back, at a
+stated pixel size. Every clause is drafted for web pages and they publish no native-app variant, so we
+comply in substance: each Adzuna card carries **"Listed on Adzuna — opens there first"** with the word
+linking to adzuna.com. Their terms also require sending people through `redirect_url`, which is moot in
+practice — the API exposes no employer URL at all. The Apply button's accessible name now branches by
+source, because it said "on the employer's website" for a link that opens an aggregator. Settings'
+"No tracking, ever" and the Coverage note were both updated; they were describing a version of the app
+that no longer existed.
+
+### Deferred, and named so they are not forgotten
+
+- **No cross-run call ledger.** The budget holds by construction, but a user who presses "Search now"
+  many times a day could still exhaust the monthly cap. A ledger in `settings` (the `spend.ts` pattern)
+  resolved in `buildSources` is the fix.
+- **No retention pass.** Nothing deletes jobs. Employer boards are re-fetched whole so a pulled req
+  stops arriving; an Adzuna keyword query never says a posting was removed. Aggregator rows will
+  accumulate and go stale.
+- **Description asymmetry is unmeasured.** Adzuna's `description` is a truncated snippet of a couple
+  hundred characters against `JOB_TEXT_MAX_CHARS = 1000`. Short, title-dominated text may score
+  systematically higher cosine against a title-dominated profile, which would mean Adzuna rows float up
+  because their text is short rather than because they fit. The rank-eval fixtures freeze cosines and
+  are structurally blind to this. It needs a third labelled set captured from a live Adzuna run.
+- **Caching permission is not stated.** Their ToS covers termination and a 14-day trial clause for
+  non-listing uses, but says nothing either way about storing job data locally or for how long.
+
+**Credentials.** The app ID and key used for this work were shared in a chat transcript and should be
+rotated from the Adzuna dashboard.

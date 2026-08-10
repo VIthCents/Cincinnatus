@@ -281,3 +281,31 @@ body,
 .findings li {
   margin-bottom: var(--space-1);
 }
+
+/* Adzuna is an aggregator, and its terms require each displayed advert to be
+   labelled and linked back. It sits with the other job facts rather than as a
+   badge, because "where this came from" is a fact about the job like its pay
+   or its location — and because a person deciding whether to click deserves to
+   know the link does not go straight to the employer. */
+.cn-jobcard__via {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+}
+
+.cn-jobcard__vialink {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: var(--weight-semibold);
+  color: var(--text-link);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.cn-jobcard__vialink:hover {
+  color: var(--text-link-hover);
+}

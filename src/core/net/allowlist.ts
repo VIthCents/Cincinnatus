@@ -1,3 +1,5 @@
+import { redactCredentials } from "./redact.ts";
+
 /**
  * The only hosts Cincinnatus may ever contact.
  *
@@ -49,7 +51,7 @@ export class BlockedHostError extends Error {
 
   constructor(host: string, url: string) {
     super(
-      `Refusing to contact "${host}". Cincinnatus may only call the JSON APIs listed ` +
+      `Refusing to contact "${redactCredentials(host)}". Cincinnatus may only call the JSON APIs listed ` +
         `in src/core/net/allowlist.ts, and that host is not one of them. If this is a ` +
         `new job source, add it there and record it in docs/DECISIONS.md — but never ` +
         `add a host whose response is an HTML page. (url: ${url})`,
@@ -62,7 +64,7 @@ export class BlockedHostError extends Error {
 export class MalformedUrlError extends Error {
   constructor(url: string) {
     super(
-      `Refusing to fetch "${url}". Cincinnatus only issues https requests to a plain ` +
+      `Refusing to fetch "${redactCredentials(url)}". Cincinnatus only issues https requests to a plain ` +
         `host name with no credentials, port, or IP literal.`,
     );
     this.name = "MalformedUrlError";

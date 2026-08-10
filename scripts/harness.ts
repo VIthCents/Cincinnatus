@@ -14,6 +14,7 @@ import {
   fetchGreenhouseBoardName,
 } from "../src/core/sources/greenhouse.ts";
 import { createUsaJobsSource } from "../src/core/sources/usajobs.ts";
+import { createAdzunaSource } from "../src/core/sources/adzuna.ts";
 import type { Source } from "../src/core/sources/source.ts";
 import type { Llm, ProgressEvent, Reporter } from "../src/core/ports.ts";
 import type { Job, Profile, RankedJob, WatchlistEntry } from "../src/core/types.ts";
@@ -391,6 +392,31 @@ async function commandSearch(values: SearchFlags): Promise<number> {
   } else {
     out(
       "Federal jobs are turned off. Set USAJOBS_API_KEY and USAJOBS_USER_AGENT to include them.",
+    );
+  }
+
+  // Adzuna is optional and keyed. It is the only aggregator here, and it is
+  // what reaches the trades — driving, warehouse, maintenance — that the
+  // employer boards above almost never carry.
+  const adzunaId = process.env["ADZUNA_APP_ID"];
+  const adzunaKey = process.env["ADZUNA_APP_KEY"];
+  if (
+    adzunaId !== undefined &&
+    adzunaId !== "" &&
+    adzunaKey !== undefined &&
+    adzunaKey !== ""
+  ) {
+    sources.push(
+      createAdzunaSource({
+        auth: { appId: adzunaId, appKey: adzunaKey },
+        keywords: terms.titles,
+        locationName: terms.locationName,
+        radiusMiles: terms.radiusMiles,
+      }),
+    );
+  } else {
+    out(
+      "More job listings are turned off. Set ADZUNA_APP_ID and ADZUNA_APP_KEY to include them.",
     );
   }
 

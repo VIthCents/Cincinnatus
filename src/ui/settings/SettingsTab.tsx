@@ -1,3 +1,4 @@
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { useEffect, useState } from "react";
 import { getMonthSpend, spendInWords } from "../../core/app/spend.ts";
 import {
@@ -10,17 +11,26 @@ import {
   SECRET_ANTHROPIC_KEY,
   SECRET_USAJOBS_EMAIL,
   SECRET_USAJOBS_KEY,
+  SECRET_ADZUNA_APP_ID,
+  SECRET_ADZUNA_APP_KEY,
   setSecret,
 } from "../../tauri/secrets.ts";
 import { tauriClock } from "../../tauri/clock.ts";
 
 import * as repo from "../../core/db/repo.ts";
-import { db, validateAnthropicKey, validateUsaJobsKey } from "../app/services.ts";
+import {
+  db,
+  hasAdzunaKeys,
+  validateAdzunaKeys,
+  validateAnthropicKey,
+  validateUsaJobsKey,
+} from "../app/services.ts";
 import { isThemePreference } from "../app/theme.ts";
 import { useAppDispatch, useAppState } from "../app/state.tsx";
 import { Icon } from "../components/Icon.tsx";
 import {
   Banner,
+  Disclosure,
   PrimaryButton,
   QuietButton,
   SelectField,
@@ -80,6 +90,11 @@ export function SettingsTab() {
       </section>
 
       <section className="set">
+        <h3>More job listings</h3>
+        <AdzunaSection />
+      </section>
+
+      <section className="set">
         <h3>How often to search</h3>
         <SettingsRow
           title="Look for new jobs on a schedule"
@@ -133,7 +148,13 @@ export function SettingsTab() {
           Your resume, your chats, and every document live only on this computer.
           Nothing is sent anywhere except: job searches go to the job sites, and — only
           if you connected the AI helper — your resume and the one job you pick go to
-          Anthropic to write your documents. No tracking, ever.
+          Anthropic to write your documents.
+        </p>
+        <p className="prose">
+          Cincinnatus does not track you and never sends anyone your details. One thing
+          worth knowing: if you turned on more job listings, tapping Apply on one of
+          those opens it on Adzuna first, and Adzuna counts that tap. That is how they
+          pay for letting us list their jobs.
         </p>
       </section>
     </div>
@@ -286,6 +307,138 @@ function UsaJobsSection({
           {checking ? "Checking" : "Save my key and continue"}
         </PrimaryButton>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Adzuna is the source that reaches the trades — driving, warehouse,
+ * maintenance — that employer job boards almost never carry. Measured on a real
+ * corpus: a CDL driver near Fayetteville had almost nothing to apply to from
+ * the employer boards alone, and one Adzuna search found nearly two thousand
+ * driving jobs within an hour of her.
+ *
+ * It is deliberately NOT in the first-run wizard. That already sends people to
+ * one developer website for the AI key; sending them to a second before they
+ * have seen a single job is where people give up. This lives here, and the
+ * numbered steps name the exact dropdown option, because picking the wrong one
+ * puts the account on a 14-day trial that expires without telling anyone.
+ */
+function AdzunaSection() {
+  const [appId, setAppId] = useState("");
+  const [appKey, setAppKey] = useState("");
+  const [connected, setConnected] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+
+  useEffect(() => {
+    void hasAdzunaKeys().then(setConnected);
+  }, []);
+
+  async function save() {
+    setChecking(true);
+    setMessage(null);
+    const outcome = await validateAdzunaKeys(appId.trim(), appKey.trim());
+    setChecking(false);
+    if (outcome.ok) {
+      await setSecret(SECRET_ADZUNA_APP_ID, appId.trim());
+      await setSecret(SECRET_ADZUNA_APP_KEY, appKey.trim());
+      setMessage({
+        ok: true,
+        text: "That worked. You will see more jobs from now on.",
+      });
+      setAppId("");
+      setAppKey("");
+      setConnected(true);
+    } else {
+      setMessage({ ok: false, text: outcome.message });
+    }
+  }
+
+  return (
+    <div className="stack">
+      {connected ? (
+        <Banner tone="success" title="More job listings are on.">
+          You are seeing driving, warehouse and trades jobs as well as the ones from
+          company job boards.
+        </Banner>
+      ) : (
+        <p className="prose">
+          Free, and worth doing. Company job boards carry a lot of office and
+          engineering work. This adds driving, warehouse, maintenance and trades jobs
+          near you.
+        </p>
+      )}
+
+      <Disclosure
+        summary="How to get these numbers (about 5 minutes)"
+        defaultOpen={!connected}
+      >
+        <ol className="cn-guide">
+          <li>
+            Go to{" "}
+            <button
+              type="button"
+              className="cn-jobcard__vialink"
+              onClick={() => void openUrl("https://developer.adzuna.com/signup")}
+            >
+              developer.adzuna.com/signup
+            </button>{" "}
+            and fill in your name and email.
+          </li>
+          <li>
+            Where it asks what you are building, choose{" "}
+            <strong>Publishing Adzuna ad listings</strong>. This matters — the other
+            choices stop working after two weeks.
+          </li>
+          <li>
+            If it asks for a website and you do not have one, put{" "}
+            <strong>https://github.com/cincinnatus/cincinnatus</strong>.
+          </li>
+          <li>Check your email and click the link they send you.</li>
+          <li>
+            You land on a page called <strong>Dashboard</strong>. Copy the two things it
+            shows you into the boxes below. The Application ID is short. The Application
+            Key is long.
+          </li>
+        </ol>
+      </Disclosure>
+
+      <TextField
+        label="Application ID"
+        hint="The short one, about 8 characters"
+        mono
+        value={appId}
+        onChange={(e) => setAppId(e.target.value)}
+        autoComplete="off"
+        spellCheck={false}
+      />
+      <TextField
+        label="Application Key"
+        hint="The long one, about 32 characters"
+        mono
+        value={appKey}
+        onChange={(e) => setAppKey(e.target.value)}
+        autoComplete="off"
+        spellCheck={false}
+        {...(message !== null && !message.ok ? { error: message.text } : {})}
+      />
+      {message !== null && message.ok && <Banner tone="success">{message.text}</Banner>}
+      <div className="row">
+        <PrimaryButton
+          icon="key"
+          loading={checking}
+          disabled={appId.trim() === "" || appKey.trim() === "" || checking}
+          onClick={() => void save()}
+        >
+          {checking ? "Checking" : "Save and turn on more jobs"}
+        </PrimaryButton>
+      </div>
+      <p className="prose--muted">
+        These jobs are gathered by Adzuna from around the web, so a few may be older or
+        listed twice. Tapping Apply opens the listing on Adzuna first, and Adzuna counts
+        that tap.
+      </p>
     </div>
   );
 }

@@ -244,6 +244,12 @@ function CoverageNote({ onGoToChat }: { onGoToChat: () => void }) {
           than in the middle of the country.
         </p>
         <p>
+          If you turned on more job listings in Settings, it also reads Adzuna, which
+          gathers jobs from around the web. That is where most driving, warehouse and
+          trades work comes from. Because those are collected from other places, a few
+          may be older or show up twice.
+        </p>
+        <p>
           Some big employers of veterans — Lockheed Martin, Northrop Grumman, RTX,
           Leidos, Booz Allen, GDIT, USAA, Peraton, CACI and V2X — post through systems
           Cincinnatus is not allowed to read. Their jobs will not show up here.
@@ -325,6 +331,13 @@ function JobCard({
   }
 
   const where = `${job.title} at ${job.company}`;
+  // Adzuna is an aggregator: its link opens Adzuna, not the employer. The
+  // button must not promise otherwise — that promise is most of what this
+  // app has going for it.
+  const viaAdzuna = job.source === "adzuna";
+  const applyDestination = viaAdzuna
+    ? `Apply for ${where} — opens the Adzuna listing`
+    : `Apply for ${where} on the employer's website`;
 
   return (
     <li
@@ -383,6 +396,20 @@ function JobCard({
           }
           missing="Posted date not listed"
         />
+        {viaAdzuna && (
+          <span className="cn-jobcard__via">
+            <Icon name="open_in_new" size={18} />
+            Listed on{" "}
+            <button
+              type="button"
+              className="cn-jobcard__vialink"
+              onClick={() => void openUrl("https://www.adzuna.com/")}
+            >
+              Adzuna
+            </button>
+            {" — opens there first"}
+          </span>
+        )}
         {job.source === "usajobs" && (
           <span>
             <Icon name="check_circle" size={18} />
@@ -428,7 +455,7 @@ function JobCard({
               size="md"
               iconEnd="open_in_new"
               onClick={() => void openUrl(job.url)}
-              ariaLabel={`Apply for ${where} on the employer's website`}
+              ariaLabel={applyDestination}
             >
               Apply
             </Button>
@@ -439,7 +466,7 @@ function JobCard({
             size="md"
             iconEnd="open_in_new"
             onClick={() => void openUrl(job.url)}
-            ariaLabel={`Apply for ${where} on the employer's website`}
+            ariaLabel={applyDestination}
           >
             Apply
           </Button>
