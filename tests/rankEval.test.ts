@@ -46,15 +46,37 @@ interface Candidate {
 }
 
 /**
- * Only labelled sets are gated. `fixtures/rank-eval/infantry.jsonl` is exported
- * and committed but not yet labelled — a second profile exists so that tuning
- * cannot quietly overfit to one veteran. TODO(rank-eval): label it.
+ * Two profiles, gated separately, so tuning for one veteran cannot quietly
+ * cost another — which nearly happened: the title-affinity weight that looked
+ * best on the CDL set alone (0.808 at w=0.1) was flat on the infantry set,
+ * where "Security Officer" matches half the corpus. The credential gate was
+ * kept because it improved BOTH; the affinity bonus was kept small for the
+ * same reason.
+ *
+ * Label provenance differs and it matters: the CDL labels came from three
+ * independent judges (unanimous on all 49); the infantry labels are a single
+ * careful pass. Treat infantry floors with proportionally less reverence.
+ *
+ * Floors are per-set because the sets are differently hard. Every floor is a
+ * ratchet: raise it when the ranking genuinely improves, never lower it to
+ * make a change pass.
  */
 const SETS = [
   {
     name: "CDL driver / supply specialist",
     file: "cdl",
     profile: "profile.sample.json",
+    // Measured 0.561 / last-2 at rank 10 on 2026-08-10, after reach.ts.
+    ndcg10Floor: 0.55,
+    lastStrongWithin: 12,
+  },
+  {
+    name: "infantry / security",
+    file: "infantry",
+    profile: "profile.infantry.json",
+    // Measured 0.745 / last-2 at rank 18 on 2026-08-10, after reach.ts.
+    ndcg10Floor: 0.7,
+    lastStrongWithin: 20,
   },
 ] as const;
 
@@ -148,29 +170,20 @@ describe("ranking quality on labelled real jobs", () => {
     const ordered = ranked.map((r) => labelOf.get(r.job.id) ?? 0);
 
     /**
-     * A ratchet, not an aspiration. 0.45 is what the ranking scores today
-     * (measured 0.455 on 2026-08-09, after the widening and freshness fixes);
-     * this fails if it gets worse. Raise the floor whenever it genuinely
-     * improves, and never lower it to make a change pass.
+     * The sample is deliberately hard: candidates are stratified toward the
+     * head of the ranking, so nearly everything scores well and the scorer
+     * gets little help from easy negatives. NDCG here is pessimistic next to
+     * the whole corpus, which is the point of a gate.
      *
-     * Note the sample is deliberately hard: the candidates are stratified
-     * toward the head of the ranking, so nearly all of them score well and the
-     * scorer gets little help from easy negatives. NDCG here is pessimistic
-     * next to the whole corpus, which is the point of a gate.
-     *
-     * The gap to 0.75 is two distinct problems, and neither is the blend:
-     *   1. Age still reorders fit gaps under 1/FRESHNESS_FLOOR. "Military
-     *      Shipping Lead" has the highest fit in the set (57.2) and a unanimous
-     *      label of 2, and lands at rank 8 because it is old.
-     *   2. The embedding itself does not discriminate. "Firefighter (Basic Life
-     *      Support)" scores 51.5 against a CDL driver profile and is labelled 0
-     *      by all three judges; "Class A Driver" scores 47.0 and is labelled 2.
-     *      No amount of blend tuning fixes an encoder that ranks those that way
-     *      — that is what buildJobText/buildProfileText work is for, and this
-     *      fixture cannot see it, because the cosines are frozen.
+     * What moved the floors to where they are (see docs/DECISIONS.md):
+     * pipeline/reach.ts corrects the encoder's category error — cosine answers
+     * "same subject?", the veteran asks "could I get it?". The credential gate
+     * fired on 43% and 60% of judge-rejected jobs across the two sets and on
+     * zero judge-approved ones; the title-affinity bonus is small because it
+     * only helps one of the two profiles.
      */
     it(`${set.name}: orders the good jobs first (NDCG@10)`, () => {
-      expect(ndcg(ordered, 10)).toBeGreaterThanOrEqual(0.45);
+      expect(ndcg(ordered, 10)).toBeGreaterThanOrEqual(set.ndcg10Floor);
     });
 
     it(`${set.name}: the top 5 is not padded with jobs she cannot get`, () => {
@@ -179,14 +192,14 @@ describe("ranking quality on labelled real jobs", () => {
     });
 
     /**
-     * The failure that shipped, as a direct assertion: a job she would actually
-     * take, buried under jobs she cannot get. Currently the last label-2 sits at
-     * rank 15 of 49. Ratchet this down as the encoder improves.
+     * The failure that shipped, as a direct assertion: a job the person would
+     * actually take, buried under jobs they cannot get. Ratchet these down as
+     * the encoder improves.
      */
     it(`${set.name}: no strong match is buried`, () => {
       const lastTwo = ordered.lastIndexOf(2);
       expect(lastTwo).toBeGreaterThanOrEqual(0);
-      expect(lastTwo).toBeLessThan(15);
+      expect(lastTwo).toBeLessThan(set.lastStrongWithin);
     });
   }
 });

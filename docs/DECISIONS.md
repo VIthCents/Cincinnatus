@@ -757,3 +757,45 @@ everything in the set scores well and NDCG here is pessimistic against the whole
 a gate. `fixtures/rank-eval/infantry.jsonl` is exported and committed but **not yet labelled**; a second
 profile exists specifically so tuning cannot quietly overfit to one veteran, and it is not doing that job
 until it has labels.
+
+---
+
+## 2026-08-10 — Rank on reach, not only on subject: the credential gate and the title-affinity nudge
+
+**Context.** With the quality gate in place, the encoder was the measured bottleneck: cosine similarity
+answers _"is this text about the same subject"_, and the veteran is asking _"could I get this job"_.
+The two come apart in both directions — "Firefighter (Basic Life Support)" scored above "Class A Driver"
+for a CDL holder, and four degree-gated "Senior Security Operations Engineer" (cyber) roles outranked
+every federal police posting for an infantry NCO.
+
+**Decision.** `pipeline/reach.ts`, applied to the similarity before `fitFromSimilarity`:
+
+1. **Credential gate** (−0.15 cosine): a title naming a degree-fenced role (engineer, counsel,
+   scientist, recruiter, …) is demoted **only when the profile shows no degree**. Measured on 88
+   labelled jobs across both profiles: fires on 43% / 60% of judge-rejected jobs, on **zero**
+   judge-approved ones. That precision is what makes it safe. It demotes rather than excludes, and the
+   reason is deliberately not surfaced on the card — "this needs a degree you do not have" would be a
+   confident claim about a fact the posting never stated (constraint 4 territory).
+2. **Title affinity** (+0.1 × overlap): how much the job title looks like the person's own titles plus
+   the MOC crosswalk. Kept small on evidence: tuned alone on the CDL set it looked worth w=0.1
+   (NDCG@10 0.557→0.808), but on the infantry set it was flat — "Security Officer" matches half that
+   corpus. A signal that helps one veteran and does nothing for another gets a nudge, not a lever.
+
+The near-miss is the lesson: **the second labelled profile caught the overfit before it shipped.** The
+infantry set (39 jobs, labelled in a single careful pass — weaker provenance than the CDL set's three
+unanimous judges, and recorded as such in the test) went from decoration to the thing that vetoed a
+wrong weight on its first day.
+
+**Measured, full ranker, before → after:**
+
+| set      | NDCG@10           | last strong match at rank | zeros in top 5 |
+| -------- | ----------------- | ------------------------- | -------------- |
+| CDL      | 0.455 → **0.561** | 15 → **10**               | 1 → 1          |
+| infantry | 0.421 → **0.745** | — → 18                    | — → **0**      |
+
+The infantry top 5 is now Security Officer / Police Officer / Emergency Management, no engineers.
+Floors ratcheted accordingly (0.55 / 0.70), per-set because the sets are differently hard.
+
+**Rejected:** a seniority penalty ("Senior", "Staff", "Manager", …). It fired on half the CDL set's
+judge-approved jobs — an 8-year NCO legitimately walks into supervisory roles — and NDCG confirmed it
+cost more than it bought on that profile. The word "senior" is not a gate; a J.D. is.

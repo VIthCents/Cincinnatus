@@ -64,6 +64,22 @@ export const EMBED_BATCH_SIZE = 32;
  * reads as a broken app; a long list of unreachable jobs reads as a useless one.
  * Widening and saying so is the honest middle.
  */
+/**
+ * How far a degree-gated role is pushed down for someone with no degree, in
+ * cosine units. 0.15 against a corpus whose cosines span roughly 0.0-0.63, so
+ * it demotes without erasing: a gated job that is still far and away the best
+ * topical match survives the penalty, which is the intent. See
+ * pipeline/reach.ts for the measurement behind the number.
+ */
+export const CREDENTIAL_GATE_PENALTY = 0.15;
+
+/**
+ * How much a job title that looks like work the person has actually done is
+ * worth, at most. Small on purpose: a tiebreaker between topically similar
+ * jobs, not a second ranking. See pipeline/reach.ts.
+ */
+export const TITLE_AFFINITY_BONUS = 0.1;
+
 export const MIN_RESULTS_BEFORE_WIDENING = 10;
 
 /**

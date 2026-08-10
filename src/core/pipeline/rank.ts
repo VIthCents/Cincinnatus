@@ -9,6 +9,7 @@ import {
   median,
 } from "./score.ts";
 import { isExcluded } from "./queries.ts";
+import { reachAdjustedSimilarity } from "./reach.ts";
 
 /**
  * Is this job somewhere the user could actually take it?
@@ -81,7 +82,14 @@ export function rankJobs(input: RankInput): RankOutput {
     const similarity =
       profileVector === null || vector === undefined ? 0 : dot(profileVector, vector);
 
-    const fitScore = fitFromSimilarity(similarity);
+    // Cosine answers "is this text about the same subject". The veteran is
+    // asking "could I get this job", and those come apart badly: the encoder
+    // ranks Firefighter above Class A Driver for a CDL holder, and degree-gated
+    // cyber roles above every federal police posting for an infantry NCO.
+    // reach.ts corrects for both. See docs/DECISIONS.md.
+    const fitScore = fitFromSimilarity(
+      reachAdjustedSimilarity(similarity, job.title, profile),
+    );
 
     // postedAt is null only when the source gave no date. firstSeenAt is the
     // honest fallback: it is when *we* first saw it, which is an upper bound on
