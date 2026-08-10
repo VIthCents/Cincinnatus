@@ -213,3 +213,47 @@ export const ADZUNA_RESULTS_PER_PAGE = 50;
  * padded, and buries the variety the person actually needs to see.
  */
 export const MAX_PER_EMPLOYER_ROLE = 3;
+
+/**
+ * Sources that gather listings from elsewhere, rather than being an
+ * employer's own board. The distinction matters for staleness: a company
+ * board is fetched whole every run, so a filled job simply stops arriving
+ * and disappears on its own. A keyword search against an aggregator never
+ * says a posting was pulled — it just is not in this slice.
+ */
+export const AGGREGATOR_SOURCES: readonly string[] = ["adzuna"];
+
+/**
+ * How long an aggregator listing may go unseen before it stops being shown.
+ *
+ * Aggregator ads die faster than a company's own board, and a dead link is
+ * the fastest way to teach someone the list cannot be trusted: they click
+ * Apply, wait for the browser, follow a redirect, and land on 'no longer
+ * accepting applications'. Three of those in one sitting and the app has
+ * taught them not to believe any of it.
+ *
+ * 30 days is deliberately generous, because not being re-seen is weak
+ * evidence: each run only asks for a slice, so a live job that drifts off
+ * the first two pages goes unseen for a while. Hiding a live job costs a
+ * person nothing they can perceive; showing a dead one costs trust.
+ */
+export const AGGREGATOR_STALE_DAYS = 30;
+
+/**
+ * When an unseen aggregator row is deleted rather than merely hidden.
+ *
+ * Nothing else in this app deletes a job. Aggregator rows are the one source
+ * that grows without bound — every run returns a different slice of a
+ * national corpus — and the whole table is read on every app open. Rows the
+ * person has touched (thumbed, hidden, or prepared an application for) are
+ * never deleted, whatever their age.
+ */
+export const AGGREGATOR_DELETE_DAYS = 90;
+
+/**
+ * Held under Adzuna's published 250/day and 2,500/month. They count the
+ * request, not the answer, and a run that dies mid-flight still spent what it
+ * sent — so a ledger tracking the limit exactly would occasionally ask for one
+ * more than was really left.
+ */
+export const ADZUNA_QUOTA = { perDay: 220, perMonth: 2200 };

@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   ADZUNA_MAX_PAGES,
+  ADZUNA_QUOTA,
   ADZUNA_MAX_TERMS,
   DEFAULT_REQUEST_DELAY_MS,
   REQUEST_DELAY_MS,
 } from "../src/core/config.ts";
 import { redactCredentials } from "../src/core/net/redact.ts";
+import { quotaStatus, quotaWords, recordCalls } from "../src/core/app/quota.ts";
 import { locationFromArea, stateCodeFor } from "../src/core/pipeline/states.ts";
 import {
   buildAdzunaSearchUrl,
@@ -15,6 +17,9 @@ import { toPlainMessage } from "../src/core/sources/source.ts";
 import { rankJobs } from "../src/core/pipeline/rank.ts";
 import { parseProfile } from "../src/core/profile/parse.ts";
 import { readFileSync } from "node:fs";
+import { NodeDb } from "../src/node/db.ts";
+import { migrate } from "../src/core/db/migrations.ts";
+import * as repo from "../src/core/db/repo.ts";
 
 const profileOf = () => {
   const parsed = parseProfile(
@@ -260,5 +265,166 @@ describe("one employer cannot fill the screen", () => {
     // The other employers are visible rather than buried under nine of one.
     expect(topFive).toContain("Hepaco");
     expect(topFive).toContain("Decker");
+  });
+});
+
+describe("the quota ledger", () => {
+  /**
+   * The per-run budget already holds by construction. This exists for what
+   * construction cannot cover: someone pressing "Search now" because they are
+   * hopeful, several times a day, for a month.
+   *
+   * The point is not the quota. It is that a source which silently stops
+   * answering looks exactly like an app that has quietly got worse, and the
+   * person it happens to has no way to find out otherwise.
+   */
+  function memoryDb() {
+    const rows = new Map<string, string>();
+    return {
+      all: async (sql: string, params: unknown[] = []) =>
+        sql.includes("settings") && rows.has(String(params[0]))
+          ? [{ value: rows.get(String(params[0])) }]
+          : [],
+      run: async (sql: string, params: unknown[] = []) => {
+        if (sql.includes("settings")) rows.set(String(params[0]), String(params[1]));
+      },
+    } as never;
+  }
+
+  const DAY = 86_400_000;
+  const LIMITS = { perDay: 220, perMonth: 2200 };
+
+  it("gives the full budget on a fresh day", async () => {
+    const status = await quotaStatus(memoryDb(), "adzuna", LIMITS, 1_700_000_000_000);
+    expect(status.remaining).toBe(220);
+    expect(status.exhausted).toBeNull();
+  });
+
+  it("spends down and then reports which ceiling bit", async () => {
+    const db = memoryDb();
+    const now = Date.parse("2026-08-10T12:00:00Z");
+    await recordCalls(db, "adzuna", 220, now);
+    const status = await quotaStatus(db, "adzuna", LIMITS, now);
+    expect(status.remaining).toBe(0);
+    expect(status.exhausted).toBe("day");
+    // Plain words, and it says what the person still has.
+    expect(quotaWords("day")).toContain("tomorrow");
+    expect(quotaWords("month")).toContain("next month");
+  });
+
+  it("resets the next day but keeps counting the month", async () => {
+    const db = memoryDb();
+    const now = Date.parse("2026-08-10T12:00:00Z");
+    await recordCalls(db, "adzuna", 220, now);
+    // The day resets to its own full budget; the month keeps the 220 already
+    // spent, and whichever ceiling is closer is the one that binds.
+    const tomorrow = await quotaStatus(db, "adzuna", LIMITS, now + DAY);
+    expect(tomorrow.remaining).toBe(LIMITS.perDay);
+    expect(tomorrow.exhausted).toBeNull();
+  });
+
+  it("lets the monthly ceiling bind once the month is nearly spent", async () => {
+    const db = memoryDb();
+    const now = Date.parse("2026-08-20T12:00:00Z");
+    await recordCalls(db, "adzuna", LIMITS.perMonth - 50, now);
+    const next = await quotaStatus(db, "adzuna", LIMITS, now + DAY);
+    expect(next.remaining).toBe(50);
+  });
+
+  it("stays under Adzuna's published ceilings", () => {
+    expect(ADZUNA_QUOTA.perDay).toBeLessThan(250);
+    expect(ADZUNA_QUOTA.perMonth).toBeLessThan(2500);
+  });
+});
+
+describe("stale aggregator listings", () => {
+  /**
+   * A company board is fetched whole every run, so a filled job simply stops
+   * arriving. A keyword search against an aggregator never says a posting was
+   * pulled — it just is not in this slice. Left alone, the list fills up with
+   * ads that were live in March, and someone clicks Apply, waits for the
+   * browser, follows a redirect and lands on "no longer accepting
+   * applications". Three of those and the app has taught them not to believe
+   * any of it.
+   *
+   * The window is deliberately generous, because not being re-seen is weak
+   * evidence: each run only asks for a slice. Hiding a live job costs a person
+   * nothing they can perceive; showing a dead one costs trust.
+   */
+  const NOW = Date.parse("2026-08-10T12:00:00Z");
+  const DAY = 86_400_000;
+
+  const row = (id: string, source: string, lastSeen: number) => ({
+    id,
+    source,
+    externalId: id,
+    title: `Job ${id}`,
+    company: "Someone",
+    location: "Fayetteville, NC",
+    remote: null,
+    salaryMin: null,
+    salaryMax: null,
+    salaryCurrency: null,
+    salaryInterval: null,
+    url: "https://example.test",
+    postedAt: lastSeen,
+    postedAtIsEstimated: false,
+    descriptionText: "x",
+    raw: "{}",
+    firstSeenAt: lastSeen,
+    lastSeenAt: lastSeen,
+    dedupeKey: id,
+    canonicalId: null,
+  });
+
+  async function seeded() {
+    const db = new NodeDb(":memory:");
+    await migrate(db, NOW);
+    await repo.upsertJobs(db, [
+      row("fresh-adzuna", "adzuna", NOW - 2 * DAY),
+      row("stale-adzuna", "adzuna", NOW - 45 * DAY),
+      row("ancient-adzuna", "adzuna", NOW - 200 * DAY),
+      // A company board says so itself by not returning the job, so age alone
+      // must never hide one.
+      row("ancient-greenhouse", "greenhouse", NOW - 200 * DAY),
+    ] as never);
+    return db;
+  }
+
+  it("hides aggregator rows nobody has seen for a month", async () => {
+    const db = await seeded();
+    const ids = (await repo.listRankableJobs(db, NOW)).map((j) => j.id);
+    expect(ids).toContain("fresh-adzuna");
+    expect(ids).not.toContain("stale-adzuna");
+    db.close();
+  });
+
+  it("never hides an employer board's job for being old", async () => {
+    const db = await seeded();
+    const ids = (await repo.listRankableJobs(db, NOW)).map((j) => j.id);
+    expect(ids).toContain("ancient-greenhouse");
+    db.close();
+  });
+
+  it("deletes only long-dead aggregator rows the person never touched", async () => {
+    const db = await seeded();
+    // Their own thumbs are theirs. A retention rule must not erase them.
+    await repo.saveFeedback(db, "ancient-adzuna", "up", NOW);
+    await repo.purgeStaleAggregatorJobs(db, NOW);
+    const all = (await repo.listRankableJobs(db)).map((j) => j.id);
+    expect(all).toContain("ancient-adzuna");
+    expect(all).toContain("ancient-greenhouse");
+    expect(all).toContain("fresh-adzuna");
+    db.close();
+  });
+
+  it("does delete an untouched long-dead aggregator row", async () => {
+    const db = await seeded();
+    await repo.purgeStaleAggregatorJobs(db, NOW);
+    const all = (await repo.listRankableJobs(db)).map((j) => j.id);
+    expect(all).not.toContain("ancient-adzuna");
+    // 45 days is stale enough to hide, not old enough to delete.
+    expect(all).toContain("stale-adzuna");
+    db.close();
   });
 });

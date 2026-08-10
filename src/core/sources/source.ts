@@ -29,6 +29,12 @@ export interface SourceFetchResult {
   readonly newState: ConditionalState | null;
   /** Plain-language message, or null. Never a stack trace. */
   readonly error: string | null;
+  /**
+   * Requests actually issued, for sources whose provider enforces a quota
+   * across runs. Omitted by sources with no such limit — a Source is handed no
+   * database and cannot count for itself, so the pipeline records this.
+   */
+  readonly requests?: number;
 }
 
 export interface Source {

@@ -4,7 +4,11 @@ import { parseArgs } from "node:util";
 import { dirname, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { USAJOBS_DEFAULT_WINDOW_DAYS, estimateCostUsd } from "../src/core/config.ts";
+import {
+  ADZUNA_QUOTA,
+  USAJOBS_DEFAULT_WINDOW_DAYS,
+  estimateCostUsd,
+} from "../src/core/config.ts";
 import { parseProfile } from "../src/core/profile/parse.ts";
 import { profileFromResume } from "../src/core/profile/fromResume.ts";
 import { buildSearchTerms } from "../src/core/pipeline/queries.ts";
@@ -19,6 +23,7 @@ import type { Source } from "../src/core/sources/source.ts";
 import type { Llm, ProgressEvent, Reporter } from "../src/core/ports.ts";
 import type { Job, Profile, RankedJob, WatchlistEntry } from "../src/core/types.ts";
 import * as repo from "../src/core/db/repo.ts";
+import { quotaStatus, quotaWords } from "../src/core/app/quota.ts";
 import { MATCH_WORDS, matchLevel } from "../src/core/pipeline/match.ts";
 
 import { analyzeResume } from "../src/core/documents/analyze.ts";
@@ -406,14 +411,20 @@ async function commandSearch(values: SearchFlags): Promise<number> {
     adzunaKey !== undefined &&
     adzunaKey !== ""
   ) {
-    sources.push(
-      createAdzunaSource({
-        auth: { appId: adzunaId, appKey: adzunaKey },
-        keywords: terms.titles,
-        locationName: terms.locationName,
-        radiusMiles: terms.radiusMiles,
-      }),
-    );
+    const quota = await quotaStatus(db, "adzuna", ADZUNA_QUOTA, nodeClock.now());
+    if (quota.remaining > 0) {
+      sources.push(
+        createAdzunaSource({
+          auth: { appId: adzunaId, appKey: adzunaKey },
+          keywords: terms.titles,
+          locationName: terms.locationName,
+          radiusMiles: terms.radiusMiles,
+          maxCalls: quota.remaining,
+        }),
+      );
+    } else if (quota.exhausted !== null) {
+      out(quotaWords(quota.exhausted));
+    }
   } else {
     out(
       "More job listings are turned off. Set ADZUNA_APP_ID and ADZUNA_APP_KEY to include them.",

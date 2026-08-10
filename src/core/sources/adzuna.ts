@@ -53,6 +53,11 @@ export interface AdzunaOptions {
   /** "Fayetteville, NC", or null to search nationally. */
   readonly locationName: string | null;
   readonly radiusMiles: number | null;
+  /**
+   * Requests this run may issue, from the cross-run ledger. Omitted means
+   * the structural budget alone applies.
+   */
+  readonly maxCalls?: number;
 }
 
 interface AdzunaLocation {
@@ -134,6 +139,11 @@ export function createAdzunaSource(options: AdzunaOptions): Source {
         if (stopped) break;
 
         for (let page = 1; page <= ADZUNA_MAX_PAGES; page++) {
+          // The ledger has the last word: it knows about days this run does not.
+          if (options.maxCalls !== undefined && requests >= options.maxCalls) {
+            stopped = true;
+            break;
+          }
           let response;
           try {
             response = await getWithRetry(
@@ -210,7 +220,7 @@ export function createAdzunaSource(options: AdzunaOptions): Source {
         });
       }
 
-      return { jobs, notModified: false, newState: null };
+      return { jobs, notModified: false, newState: null, requests };
     },
   };
 }

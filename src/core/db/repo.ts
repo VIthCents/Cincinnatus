@@ -1,4 +1,9 @@
 import type { Db, SqlValue } from "../ports.ts";
+import {
+  AGGREGATOR_DELETE_DAYS,
+  AGGREGATOR_SOURCES,
+  AGGREGATOR_STALE_DAYS,
+} from "../config.ts";
 import type { Job, Profile, SourceId, WatchlistEntry } from "../types.ts";
 
 /**
@@ -166,11 +171,43 @@ export async function findJobsByIdPrefix(db: Db, prefix: string): Promise<Job[]>
 }
 
 /** Every job that is not a collapsed duplicate. */
-export async function listRankableJobs(db: Db): Promise<Job[]> {
-  const rows = await db.all<JobRow>(
-    "SELECT * FROM jobs WHERE canonical_id IS NULL ORDER BY id",
-  );
+export async function listRankableJobs(db: Db, now?: number): Promise<Job[]> {
+  // Aggregator listings that have not been seen for a long time are probably
+  // filled. A company board says so by not returning the job; an aggregator
+  // keyword search never does. See AGGREGATOR_STALE_DAYS.
+  const cutoff = now === undefined ? null : now - AGGREGATOR_STALE_DAYS * 86_400_000;
+  const rows =
+    cutoff === null
+      ? await db.all<JobRow>(
+          "SELECT * FROM jobs WHERE canonical_id IS NULL ORDER BY id",
+        )
+      : await db.all<JobRow>(
+          `SELECT * FROM jobs WHERE canonical_id IS NULL
+             AND (source NOT IN (${AGGREGATOR_SOURCES.map(() => "?").join(",")})
+                  OR last_seen_at >= ?)
+           ORDER BY id`,
+          [...AGGREGATOR_SOURCES, cutoff],
+        );
   return rows.map(rowToJob);
+}
+
+/**
+ * Delete long-dead aggregator rows, except any the person has touched.
+ *
+ * Their own thumbs, hides and prepared applications are theirs; a retention
+ * rule must not quietly erase them.
+ */
+export async function purgeStaleAggregatorJobs(db: Db, now: number): Promise<void> {
+  const cutoff = now - AGGREGATOR_DELETE_DAYS * 86_400_000;
+  const marks = AGGREGATOR_SOURCES.map(() => "?").join(",");
+  await db.run(
+    `DELETE FROM jobs
+      WHERE source IN (${marks})
+        AND last_seen_at < ?
+        AND id NOT IN (SELECT job_id FROM feedback)
+        AND id NOT IN (SELECT job_id FROM documents WHERE job_id IS NOT NULL)`,
+    [...AGGREGATOR_SOURCES, cutoff],
+  );
 }
 
 /**

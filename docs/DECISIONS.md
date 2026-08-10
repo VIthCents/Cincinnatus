@@ -945,3 +945,73 @@ that no longer existed.
 
 **Credentials.** The app ID and key used for this work were shared in a chat transcript and should be
 rotated from the Adzuna dashboard.
+
+---
+
+## 2026-08-10 — The three deferred Adzuna items, decided
+
+Judged against what this app is: for people with low tech literacy, open source, and distributed as a
+single binary nobody administers.
+
+### 1. Description asymmetry — measured, and it is not there
+
+The worry was that Adzuna's ~200-character snippet would score higher cosine against a
+title-dominated profile than a 1,000-character Greenhouse description, floating Adzuna rows up for
+being short rather than for fitting.
+
+Controlled test: the same 120 jobs embedded at five text budgets, so anything that moves is length
+rather than the job.
+
+| budget      | 1000   | 600    | 400    | 250    | 150    |
+| ----------- | ------ | ------ | ------ | ------ | ------ |
+| mean cosine | 0.2929 | 0.2756 | 0.2745 | 0.2806 | 0.2903 |
+
+Not monotonic, and the entire spread is 0.018 — under two points on the 0–100 fit scale. Adzuna's
+median description is 500 characters against everyone else's 6,854 (truncated to 1,000), so the real
+effect is roughly **1.7 fit points against Adzuna**. Real, tiny, and the opposite direction from the
+fear.
+
+**No code change.** The concern was raised, measured, and closed.
+
+Two things worth keeping from the measurement. Shortening job text would make the first run
+substantially faster, which is this app's worst experience — but the top-10 overlap between the 1,000
+and 150 character budgets is only 4 of 10, so this ranking is **noisy under small text changes** and
+must not be tuned for speed without a quality measurement the frozen-cosine fixtures cannot provide.
+
+### 2. Cross-run call ledger — built, for the message rather than the quota
+
+The per-run budget already holds by construction. The ledger exists for what construction cannot
+cover: someone pressing "Search now" because they are hopeful, several times a day, for a month.
+
+The reason to spend code on it is not the quota. A source that silently stops answering looks exactly
+like an app that has quietly got worse, and the person it happens to has no way to find out otherwise.
+`core/app/quota.ts` counts requests per UTC day and month in the settings table, the same way
+`spend.ts` counts money. Both composition roots ask before building the source, so an exhausted quota
+is a source that is absent rather than a run full of rejected requests — and the harness prints
+`quotaWords()`, which says which limit was hit, when it comes back, and that the jobs already found
+are still there.
+
+Ceilings held under the published ones (220/day, 2,200/month against 250 and 2,500): Adzuna counts the
+request rather than the answer, and a run that dies mid-flight still spent what it sent.
+
+`SourceFetchResult` gains an optional `requests` count. Sources are handed no database and cannot
+count for themselves; the pipeline records it.
+
+### 3. Retention — built, because a dead link is the fastest way to lose someone
+
+An employer board is fetched whole each run, so a filled job stops arriving and disappears on its own.
+A keyword search against an aggregator never says a posting was pulled — it just is not in this slice.
+Left alone the list fills with ads that were live in March, and the failure is felt directly: click
+Apply, wait for the browser, follow a redirect, land on "no longer accepting applications". Three of
+those in one sitting and the app has taught someone not to believe any of it.
+
+Aggregator rows unseen for **30 days are hidden** from ranking; unseen for **90 days they are
+deleted** — unless the person thumbed, hid, or prepared an application for them, which are theirs and
+are never erased. Employer-board jobs are never hidden for age, because their absence is already the
+signal.
+
+30 days is deliberately generous: not being re-seen is weak evidence, since each run only asks for a
+slice and a live job that drifts off the first two pages goes unseen for a while. Hiding a live job
+costs a person nothing they can perceive; showing a dead one costs trust. The delete pass also bounds
+the one table that would otherwise grow without limit, which matters when the whole thing is read on
+every app open.

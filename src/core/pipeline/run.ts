@@ -3,6 +3,7 @@ import type { Clock, Db, Embedder, Hasher, Http, Reporter } from "../ports.ts";
 import type { Job, Profile, RankedJob, RunReport, SourceOutcome } from "../types.ts";
 import { migrate } from "../db/migrations.ts";
 import * as repo from "../db/repo.ts";
+import { recordCalls } from "../app/quota.ts";
 import { assignCanonicals } from "./dedupe.ts";
 import { buildJobText, buildProfileText } from "../embed/text.ts";
 import { decodeVector, encodeVector } from "../util/base64.ts";
@@ -72,6 +73,12 @@ export async function runPipeline(options: RunOptions): Promise<RunResult> {
 
     fetched.push(...result.jobs);
 
+    // Sources cannot count their own calls across runs — they are handed no
+    // database. A provider with a daily ceiling needs someone to remember.
+    if (result.requests !== undefined) {
+      await recordCalls(db, result.sourceId, result.requests, startedAt);
+    }
+
     if (result.newState !== null) {
       await repo.putSourceState(db, source.stateKey, result.newState, startedAt);
     }
@@ -89,7 +96,8 @@ export async function runPipeline(options: RunOptions): Promise<RunResult> {
 
   // --- dedupe --------------------------------------------------------------
 
-  const all = await repo.listRankableJobs(db);
+  await repo.purgeStaleAggregatorJobs(db, startedAt);
+  const all = await repo.listRankableJobs(db, startedAt);
   const { canonicalOf, collapsed } = assignCanonicals(all);
   await repo.setCanonical(db, [...canonicalOf.entries()]);
 

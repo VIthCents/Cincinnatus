@@ -1,4 +1,6 @@
 import { TauriDb } from "../../tauri/db.ts";
+import { quotaStatus } from "../../core/app/quota.ts";
+import { ADZUNA_QUOTA } from "../../core/config.ts";
 import { tauriHttp } from "../../tauri/http.ts";
 import { tauriClock, tauriHasher } from "../../tauri/clock.ts";
 import { createTauriEmbedder } from "../../tauri/embedder.ts";
@@ -160,15 +162,22 @@ async function buildSources(profile: Profile): Promise<Source[]> {
   const adzunaId = await getSecret(SECRET_ADZUNA_APP_ID);
   const adzunaKey = await getSecret(SECRET_ADZUNA_APP_KEY);
   if (adzunaId !== null && adzunaKey !== null) {
-    const terms = buildSearchTerms(profile);
-    sources.push(
-      createAdzunaSource({
-        auth: { appId: adzunaId, appKey: adzunaKey },
-        keywords: terms.titles,
-        locationName: terms.locationName,
-        radiusMiles: terms.radiusMiles,
-      }),
-    );
+    // Adzuna enforces a daily and monthly ceiling. Ask the ledger before
+    // building the source at all, so an exhausted quota is a source that is
+    // quietly absent rather than a run full of rejected requests.
+    const quota = await quotaStatus(db, "adzuna", ADZUNA_QUOTA, tauriClock.now());
+    if (quota.remaining > 0) {
+      const terms = buildSearchTerms(profile);
+      sources.push(
+        createAdzunaSource({
+          auth: { appId: adzunaId, appKey: adzunaKey },
+          keywords: terms.titles,
+          locationName: terms.locationName,
+          radiusMiles: terms.radiusMiles,
+          maxCalls: quota.remaining,
+        }),
+      );
+    }
   }
 
   return sources;
