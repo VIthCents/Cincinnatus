@@ -23,6 +23,8 @@ import { loadRankedFromDb } from "../../core/pipeline/loadRanked.ts";
 import { buildSearchTerms } from "../../core/pipeline/queries.ts";
 import { createGreenhouseSource } from "../../core/sources/greenhouse.ts";
 import { createUsaJobsSource } from "../../core/sources/usajobs.ts";
+import { createLeverSource } from "../../core/sources/lever.ts";
+import { createAshbySource } from "../../core/sources/ashby.ts";
 import { buildAdzunaSearchUrl, createAdzunaSource } from "../../core/sources/adzuna.ts";
 import type { Source } from "../../core/sources/source.ts";
 import { markRunNow } from "../../core/app/schedule.ts";
@@ -141,11 +143,25 @@ export async function ensureDbReady(): Promise<void> {
 }
 
 /** Assemble sources exactly the way the harness does. */
+/**
+ * Every board on the watchlist, whatever runs it. Until now this filtered to
+ * Greenhouse, which silently dropped the 9 Lever and Ashby boards that Phase 1
+ * verified live — a third of the list, gone with no message.
+ */
+function sourceForBoard(entry: WatchlistEntry): Source | null {
+  if (entry.ats === "greenhouse") {
+    return createGreenhouseSource(entry.slug, entry.companyLabel);
+  }
+  if (entry.ats === "lever") return createLeverSource(entry.slug, entry.companyLabel);
+  if (entry.ats === "ashby") return createAshbySource(entry.slug, entry.companyLabel);
+  return null;
+}
+
 async function buildSources(profile: Profile): Promise<Source[]> {
   const watchlist = await repo.listWatchlist(db);
   const sources: Source[] = watchlist
-    .filter((entry) => entry.ats === "greenhouse")
-    .map((entry) => createGreenhouseSource(entry.slug, entry.companyLabel));
+    .map(sourceForBoard)
+    .filter((source): source is Source => source !== null);
 
   const key = await getSecret(SECRET_USAJOBS_KEY);
   const email = await getSecret(SECRET_USAJOBS_EMAIL);

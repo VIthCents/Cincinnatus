@@ -13,11 +13,14 @@ import { parseProfile } from "../src/core/profile/parse.ts";
 import { profileFromResume } from "../src/core/profile/fromResume.ts";
 import { buildSearchTerms } from "../src/core/pipeline/queries.ts";
 import { runPipeline } from "../src/core/pipeline/run.ts";
+import { migrate } from "../src/core/db/migrations.ts";
 import {
   createGreenhouseSource,
   fetchGreenhouseBoardName,
 } from "../src/core/sources/greenhouse.ts";
 import { createUsaJobsSource } from "../src/core/sources/usajobs.ts";
+import { createLeverSource } from "../src/core/sources/lever.ts";
+import { createAshbySource } from "../src/core/sources/ashby.ts";
 import { createAdzunaSource } from "../src/core/sources/adzuna.ts";
 import type { Source } from "../src/core/sources/source.ts";
 import type { Llm, ProgressEvent, Reporter } from "../src/core/ports.ts";
@@ -301,6 +304,20 @@ interface SearchFlags {
   capture?: boolean;
 }
 
+/**
+ * Every board on the watchlist, whatever runs it. Until now this filtered to
+ * Greenhouse, which silently dropped the 9 Lever and Ashby boards that Phase 1
+ * verified live — a third of the list, gone with no message.
+ */
+function sourceForBoard(entry: WatchlistEntry): Source | null {
+  if (entry.ats === "greenhouse") {
+    return createGreenhouseSource(entry.slug, entry.companyLabel);
+  }
+  if (entry.ats === "lever") return createLeverSource(entry.slug, entry.companyLabel);
+  if (entry.ats === "ashby") return createAshbySource(entry.slug, entry.companyLabel);
+  return null;
+}
+
 async function commandSearch(values: SearchFlags): Promise<number> {
   if (values.profile === undefined) {
     out(
@@ -336,6 +353,13 @@ async function commandSearch(values: SearchFlags): Promise<number> {
   const dbPath = join(repoRoot, values.db ?? join(".data", "harness.db"));
   mkdirSync(dirname(dbPath), { recursive: true });
   const db = new NodeDb(dbPath);
+
+  // Before anything reads a table. runPipeline migrates too — it is idempotent
+  // and version-tracked — but building the sources now asks the quota ledger
+  // how many Adzuna calls are left, and on a brand new database that table does
+  // not exist yet. Only ever visible on a first run, which is the worst place
+  // to find out.
+  await migrate(db, nodeClock.now());
 
   const fixtureDir = join(repoRoot, "fixtures", "http");
   const http =
@@ -374,8 +398,8 @@ async function commandSearch(values: SearchFlags): Promise<number> {
 
   const watchlist = loadWatchlist();
   const sources: Source[] = watchlist
-    .filter((entry) => entry.ats === "greenhouse")
-    .map((entry) => createGreenhouseSource(entry.slug, entry.companyLabel));
+    .map(sourceForBoard)
+    .filter((source): source is Source => source !== null);
 
   const usaKey = process.env["USAJOBS_API_KEY"];
   const usaAgent = process.env["USAJOBS_USER_AGENT"];

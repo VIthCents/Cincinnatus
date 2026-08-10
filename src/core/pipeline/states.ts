@@ -91,6 +91,47 @@ export function stateCodeFor(name: string): string | null {
   return CODES[key] ?? null;
 }
 
+/**
+ * A comma-separated place string with the state written out, rewritten so the
+ * radius test can see it.
+ *
+ * Lever reports `"Dallas, Texas"` and Ashby `"San Mateo, California, United
+ * States"`. `isWithinReach` matches the profile's two-letter code on a word
+ * boundary, so both would fail for a Texan or a Californian in exactly the way
+ * Adzuna's county strings would have — silently, and disguised by the
+ * nationwide widening message.
+ *
+ * Returns the input unchanged when nothing resolves. "Remote", "London" and
+ * "United States" are all real answers a board can give, and rewriting them
+ * into something more convenient would be inventing a fact.
+ */
+export function normalizeUsLocation(text: string): string {
+  const original = text.trim();
+  if (original === "") return original;
+
+  const parts = original
+    .split(",")
+    .map((p) => p.trim())
+    .filter((p) => p !== "");
+
+  // A trailing country tells the radius test nothing.
+  const withoutCountry = parts.filter(
+    (p, i) => i === 0 || !/^(united states( of america)?|usa|u\.s\.a?\.?|us)$/i.test(p),
+  );
+  if (withoutCountry.length === 0) return original;
+
+  const last = withoutCountry[withoutCountry.length - 1]!;
+  const code = stateCodeFor(last);
+  if (code === null) return original;
+
+  const city = withoutCountry
+    .slice(0, -1)
+    .filter((p) => !isAdministrativeArea(p))
+    .pop();
+
+  return city === undefined ? code : `${city}, ${code}`;
+}
+
 /** "Cumberland County" and friends are not the name of a town. */
 function isAdministrativeArea(name: string): boolean {
   return /\b(county|parish|borough|census area|municipality|city and borough)\b/i.test(
