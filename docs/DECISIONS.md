@@ -1153,3 +1153,45 @@ and signing only. It is also not a free addition — an update check on launch i
 github.com, and SPEC §3 and PRIVACY.md promise that the only things leaving the machine are search
 terms to job APIs and Anthropic calls when a key is present. That promise must be amended in plain
 words, and the check should probably be opt-in on the wizard, before any code is written.
+
+---
+
+## 2026-08-11 — JSearch is dropped, not deferred
+
+**Context.** Flagged on 2026-08-08 as "recommended for removal, for the user to rule on before Phase 4".
+Phase 4 is here, so this closes it.
+
+**Decision.** Dropped. Not built, not scaffolded, and it should come out of SPEC §6.
+
+Two independent reasons, either of which is sufficient. Its corpus is vendor-side scraping of Google for
+Jobs, LinkedIn, Indeed and Glassdoor — the exact sites constraint 1 forbids us from touching. We would
+not be scraping, but we would be _consuming a scraped corpus_, which is impossible to reconcile with the
+intent of that constraint and impossible to defend to the companies whose sites were scraped. And the
+free tier is 200 requests per **month**, which is not enough to be useful even setting the first reason
+aside.
+
+**Consequence.** `api.jsearch.co` never enters `net/allowlist.ts`, so there is no code path to remove —
+the allowlist is the mechanical enforcement and it simply never gained an entry. Supply is instead
+covered by Adzuna (2026-08-10) and by the Lever and Ashby boards (2026-08-11), which together are a
+better answer: Adzuna licenses its listings, and Lever and Ashby are the employers' own boards.
+
+---
+
+## 2026-08-11 — README serves two audiences, and the veteran half is measured
+
+**Context.** The README still said "the app currently boots to a placeholder — the Chat and
+Opportunities tabs arrive in Phase 3", which had been false for some time. It also mixed the two
+audiences the project actually has: a veteran deciding whether to install this, and a developer deciding
+whether to work on it.
+
+**Decision.** Split explicitly, veteran first. The install-facing half states what the app does, that the
+first search takes 10 to 20 minutes and why, which two optional keys exist and that neither is required,
+and exactly what leaves the machine — including the one thing that is easy to omit, that tapping Apply on
+an Adzuna listing lets Adzuna count the tap.
+
+Constraint 5 requires user-facing copy at a 6th-grade level or below, so it was measured rather than
+eyeballed: Flesch-Kincaid **4.9** (first draft came in at 6.3; two long sentences were the whole
+difference). The developer half is deliberately not held to that bar.
+
+**Consequence.** The status line now says plainly that there is no installer yet, which is the honest
+answer until the first signed release is built and someone has installed it on a clean machine.
