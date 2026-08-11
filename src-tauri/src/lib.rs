@@ -15,11 +15,24 @@ const SCHEDULER_TICK_SECS: u64 = 30 * 60;
 // Secrets
 // -----------------------------------------------------------------------------
 //
-// API keys live in a JSON file under the app's config directory — NOT in
-// SQLite (SPEC §4 forbids it) and not in localStorage. This is the Phase 3
-// interim before the OS keychain arrives in Phase 4; both commands keep the
-// same signature so swapping the backing store will not touch the UI.
-// See docs/DECISIONS.md.
+// API keys live in the OS keychain — Windows Credential Manager, macOS
+// Keychain Services — never in SQLite (SPEC §4 forbids it), never in
+// localStorage, and no longer in a plaintext file.
+//
+// Until Phase 4 they were a plaintext JSON file, which meant a user's Anthropic
+// key — a credential with real billing attached — sat readable on disk by any
+// process running as them, and got swept into OneDrive and Time Machine
+// backups. `migrate_secrets` moves anything left in that file and then
+// deletes it.
+//
+// Not stronghold: that is not an OS keychain at all but an encrypted vault file
+// needing a passphrase, which for this audience means either a prompt on every
+// launch or storing the passphrase in the keychain anyway. It also trades a
+// trivially recoverable secret (revoke and regenerate in 30 seconds) for an
+// unrecoverable one (forget the passphrase and the vault is gone). See
+// docs/DECISIONS.md.
+
+const KEYCHAIN_SERVICE: &str = "io.github.cincinnatus";
 
 fn secrets_path(app: &AppHandle) -> Result<PathBuf, String> {
     let dir = app
@@ -44,23 +57,74 @@ fn read_secrets(app: &AppHandle) -> Result<serde_json::Map<String, serde_json::V
     }
 }
 
-#[tauri::command]
-fn get_secret(app: AppHandle, name: String) -> Result<Option<String>, String> {
-    let secrets = read_secrets(&app)?;
-    Ok(secrets.get(&name).and_then(|v| v.as_str()).map(String::from))
+fn entry(name: &str) -> Result<keyring::Entry, String> {
+    keyring::Entry::new(KEYCHAIN_SERVICE, name)
+        .map_err(|e| format!("could not reach the key store: {e}"))
 }
 
 #[tauri::command]
-fn set_secret(app: AppHandle, name: String, value: String) -> Result<(), String> {
-    let mut secrets = read_secrets(&app)?;
-    if value.is_empty() {
-        secrets.remove(&name);
-    } else {
-        secrets.insert(name, serde_json::Value::String(value));
+fn get_secret(app: AppHandle, name: String) -> Result<Option<String>, String> {
+    match entry(&name)?.get_password() {
+        Ok(value) => Ok(Some(value)),
+        Err(keyring::Error::NoEntry) => {
+            // Falls back to the old file so a user who has not been migrated
+            // yet — or whose migration is still pending a retry — keeps working.
+            let secrets = read_secrets(&app)?;
+            Ok(secrets.get(&name).and_then(|v| v.as_str()).map(String::from))
+        }
+        Err(e) => Err(format!("could not read the key: {e}")),
     }
-    let path = secrets_path(&app)?;
-    fs::write(&path, serde_json::to_string_pretty(&secrets).unwrap_or_default())
+}
+
+#[tauri::command]
+fn set_secret(name: String, value: String) -> Result<(), String> {
+    let entry = entry(&name)?;
+    if value.is_empty() {
+        return match entry.delete_credential() {
+            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+            Err(e) => Err(format!("could not remove the key: {e}")),
+        };
+    }
+    entry
+        .set_password(&value)
         .map_err(|e| format!("could not save the key: {e}"))
+}
+
+/// Move any keys still in the old plaintext file into the keychain, then delete
+/// it. Runs once at startup and is safe to interrupt at any point.
+///
+/// The invariant is that plaintext is never deleted until every key has been
+/// read back out of the keychain and byte-compared. A successful write is not
+/// evidence the value is retrievable, and a migration that loses someone's key
+/// is worse than the plaintext it was fixing. If anything fails to verify,
+/// nothing is deleted and the next launch tries again.
+fn migrate_secrets(app: &AppHandle) -> Result<(), String> {
+    let path = secrets_path(app)?;
+    if !path.exists() {
+        return Ok(());
+    }
+
+    let secrets = read_secrets(app)?;
+    for (name, value) in secrets.iter() {
+        let Some(text) = value.as_str() else { continue };
+        if text.is_empty() {
+            continue;
+        }
+        let entry = entry(name)?;
+        entry
+            .set_password(text)
+            .map_err(|e| format!("could not move a key into the key store: {e}"))?;
+        match entry.get_password() {
+            Ok(read_back) if read_back == text => {}
+            Ok(_) => return Err("a key did not survive the move".into()),
+            Err(e) => return Err(format!("could not confirm a key moved: {e}")),
+        }
+    }
+
+    // Truncate before unlinking: an interruption here leaves an empty file
+    // rather than a half-written one holding part of a key.
+    fs::write(&path, "{}").map_err(|e| format!("could not clear the old key file: {e}"))?;
+    fs::remove_file(&path).map_err(|e| format!("could not remove the old key file: {e}"))
 }
 
 /// Write a file the user picked in a save dialog. The dialog is the consent
@@ -118,6 +182,16 @@ pub fn run() {
             write_user_file
         ])
         .setup(|app| {
+            // --- secrets ----------------------------------------------------
+            // Move anything left in the old plaintext file into the keychain.
+            // A failure here is not fatal: migrate_secrets deletes nothing it
+            // could not verify, so the keys are still readable from the file
+            // and get_secret still falls back to it. Starting the app is more
+            // important than finishing the move, and the next launch retries.
+            if let Err(message) = migrate_secrets(app.handle()) {
+                eprintln!("could not move saved keys into the key store: {message}");
+            }
+
             // --- tray -------------------------------------------------------
             let search = MenuItem::with_id(app, "search_now", "Search for jobs now", true, None::<&str>)?;
             let open = MenuItem::with_id(app, "open", "Open Cincinnatus", true, None::<&str>)?;
@@ -161,4 +235,27 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::KEYCHAIN_SERVICE;
+
+    /// Proves the app can actually store and retrieve a credential in the OS
+    /// keychain on this machine. Ignored by default because it touches real
+    /// per-user OS state, which a CI runner may not have unlocked:
+    ///
+    ///     cargo test -- --ignored
+    #[test]
+    #[ignore]
+    fn keychain_round_trip() {
+        let entry = keyring::Entry::new(KEYCHAIN_SERVICE, "test_only_scratch").unwrap();
+        entry.set_password("sk-ant-not-a-real-key").unwrap();
+        assert_eq!(entry.get_password().unwrap(), "sk-ant-not-a-real-key");
+        entry.delete_credential().unwrap();
+        assert!(matches!(
+            entry.get_password(),
+            Err(keyring::Error::NoEntry)
+        ));
+    }
 }

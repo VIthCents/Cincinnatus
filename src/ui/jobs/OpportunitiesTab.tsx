@@ -474,13 +474,16 @@ function JobCard({
         <span className="cn-jobcard__spacer" />
         <IconButton
           icon="thumb_up"
-          label={`More jobs like ${where}`}
+          // Says what it now does. The thumbs change what the next search
+          // looks for — they do not re-score this list, because that was
+          // measured and it made the ranking worse (pipeline/queries.ts).
+          label={`Look for more "${job.title}" jobs next time`}
           pressed={voted === "up"}
           onClick={() => vote("up")}
         />
         <IconButton
           icon="thumb_down"
-          label={`Fewer jobs like ${where}`}
+          label={`Stop looking for "${job.title}" jobs`}
           pressed={voted === "down"}
           onClick={() => vote("down")}
         />

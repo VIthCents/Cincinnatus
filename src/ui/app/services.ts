@@ -157,6 +157,18 @@ function sourceForBoard(entry: WatchlistEntry): Source | null {
   return null;
 }
 
+/**
+ * Search terms, with the person thumbs folded in. Thumbs change what gets
+ * searched for, never how anything is scored — see pipeline/queries.ts.
+ */
+async function termsFor(profile: Profile) {
+  const [promoted, demoted] = await Promise.all([
+    repo.listFeedbackTitles(db, "up"),
+    repo.listFeedbackTitles(db, "down"),
+  ]);
+  return buildSearchTerms(profile, { promoted, demoted });
+}
+
 async function buildSources(profile: Profile): Promise<Source[]> {
   const watchlist = await repo.listWatchlist(db);
   const sources: Source[] = watchlist
@@ -166,7 +178,7 @@ async function buildSources(profile: Profile): Promise<Source[]> {
   const key = await getSecret(SECRET_USAJOBS_KEY);
   const email = await getSecret(SECRET_USAJOBS_EMAIL);
   if (key !== null && email !== null) {
-    const terms = buildSearchTerms(profile);
+    const terms = await termsFor(profile);
     sources.push(
       createUsaJobsSource({
         auth: { apiKey: key, userAgentEmail: email },
@@ -183,7 +195,7 @@ async function buildSources(profile: Profile): Promise<Source[]> {
     // quietly absent rather than a run full of rejected requests.
     const quota = await quotaStatus(db, "adzuna", ADZUNA_QUOTA, tauriClock.now());
     if (quota.remaining > 0) {
-      const terms = buildSearchTerms(profile);
+      const terms = await termsFor(profile);
       sources.push(
         createAdzunaSource({
           auth: { appId: adzunaId, appKey: adzunaKey },

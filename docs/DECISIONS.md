@@ -1015,3 +1015,84 @@ slice and a live job that drifts off the first two pages goes unseen for a while
 costs a person nothing they can perceive; showing a dead one costs trust. The delete pass also bounds
 the one table that would otherwise grow without limit, which matters when the whole thing is read on
 every app open.
+
+---
+
+## 2026-08-11 — Keys move to the OS keychain; thumbs move supply, not score
+
+### Secrets: the keyring crate, not stronghold
+
+**Context.** Keys were written as plaintext JSON to `secrets.json` in the app config dir. SPEC §2 requires
+an OS keychain. The Anthropic key has real billing attached, and the file was readable by any process
+running as the user and swept into OneDrive and Time Machine backups.
+
+**Decision.** `keyring` 4.x — Windows Credential Manager and macOS Keychain Services. Measured against the
+alternative rather than assumed:
+
+|                         | keyring 4.1.6 | tauri-plugin-stronghold             |
+| ----------------------- | ------------- | ----------------------------------- |
+| Actually an OS keychain | yes           | **no** — an encrypted vault file    |
+| Needs a user passphrase | **no**        | yes                                 |
+| Marginal binary cost    | **~51 KiB**   | +87 lockfile entries, 52 new crates |
+| Builds C                | no            | yes (libsodium)                     |
+| Engine last released    | 2026-08-01    | **2024-05**                         |
+
+The argument that ends it: stronghold's passphrase would itself have to live somewhere to avoid prompting
+on every launch, and the only safe place is the OS keychain — so it either prompts a veteran for a
+passphrase every time they open the app, or it needs keyring underneath it anyway. It also trades a
+trivially recoverable secret (revoke and regenerate in 30 seconds) for an unrecoverable one: forget the
+passphrase and the vault is gone. For an audience with low tech literacy that is a new failure mode in
+exchange for nothing.
+
+Verified by round-trip against the real Windows Credential Manager — store, read back, delete, confirm
+gone — with no password prompt and no consent dialog. Kept as `cargo test --lib -- --ignored`.
+
+**Migration is one-way and interruption-safe.** Plaintext is never deleted until every key has been read
+back out of the keychain and byte-compared; a successful write is not evidence a value is retrievable. If
+anything fails to verify, nothing is deleted, the app keeps reading the file, and the next launch retries.
+The file is truncated before it is unlinked, so an interruption leaves an empty file rather than one
+holding part of a key. `get_secret` falls back to the file on NoEntry throughout.
+
+**One consequence for distribution, and it is now blocking.** macOS binds keychain item ACLs to the
+writing process's code signature. For unsigned or ad-hoc-signed builds the hash changes every release, so
+every update would greet the user with "Cincinnatus wants to use your confidential information stored in
+your keychain" asking for their Mac login password — which to this audience reads as malware. SPEC §2
+currently says "unsigned artifacts for now". A stable Developer ID Application identity is now a
+prerequisite for the macOS build, not a nice-to-have.
+
+### Thumbs change what is searched for, not how it is scored
+
+**Context.** The job card's two buttons said "More jobs like this" and "Fewer jobs like this". They
+persisted a verdict and did nothing else. Grepping for feedback under src/core/pipeline returned nothing.
+The app was making a promise it did not keep.
+
+**The obvious design is harmful, and this was measured rather than argued.** Simulating thumbs from the
+golden set's human labels, over the real 384-dimension job vectors, across Rocchio profile-nudges, k-NN
+votes (raw, gated, capped), per-company priors and per-title priors, at every weight tried: **mean
+held-out change in NDCG@10 was negative on both profiles**, with single thumbs costing up to 0.27.
+
+Worse, anything that adds to `fitScore` silently trips the widening rule. One thumbs-up is enough to raise
+the count of worthwhile nearby jobs past the threshold, at which point `widened` flips to false, the list
+stops covering the country, and it collapses to the local jobs that DECISIONS 2026-08-09 measured as
+containing **zero** hireable work — 46 of 48 labelled jobs gone, including the one Class A Driver posting
+that whole decision was written about. A feature that quietly undoes the most important ranking fix in the
+project.
+
+**Decision.** A thumb changes `buildSearchTerms`. Up promotes that posting's title to the front of the next
+search; down removes a term. This is where a thumb has leverage and no way to do harm: the CDL profile
+generates ten titles and only the first five reach Adzuna, and "Class A Driver" is not among them. It
+attacks supply, which is the measured binding constraint, and it cannot corrupt an ordering, flip
+widening, or hide anything.
+
+Two guards, and they are the whole safety argument for the down-thumb: a person's own stated titles can
+never be removed — they typed those in to say what they want, and one bad posting must not cancel it — and
+the term list can never be emptied, because a search with no terms looks exactly like a broken app.
+
+The card labels now say what the buttons do: _Look for more "X" jobs next time_ and _Stop looking for "X"
+jobs_.
+
+**Not shipped, deliberately.** No scoring-level feedback until the evaluation can see it. That needs the
+stored vector added to `export-eval.ts` output (it already selects it and discards it) and a labelled
+stratum of the vector neighbours of thumbed jobs, then a _harm_ gate: feedback must not lower NDCG. The
+measurement above proves known-good jobs get demoted; it cannot see whether the promoted unknowns are
+good, because they are unlabelled by construction.

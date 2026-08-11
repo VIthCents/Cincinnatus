@@ -33,6 +33,13 @@ tauri-plugin-dialog = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 base64 = "0.22"
+# The OS keychain: Windows Credential Manager, macOS Keychain Services.
+# Chosen over tauri-plugin-stronghold, which is not an OS keychain at all —
+# it is an encrypted vault file needing a user passphrase, and its engine
+# (iota_stronghold) has not shipped since May 2024. Measured: keyring adds
+# ~51 KiB to the binary because nearly all of its tree is already here,
+# against +87 lockfile entries and a C build (libsodium) for stronghold.
+keyring = "4"
 
 [profile.release]
 codegen-units = 1

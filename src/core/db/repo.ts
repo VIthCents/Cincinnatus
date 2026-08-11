@@ -647,3 +647,24 @@ export async function saveRun(
     [id, startedAt, finishedAt, JSON.stringify(report)],
   );
 }
+
+/**
+ * The job titles behind a person's thumbs, newest first.
+ *
+ * Feeds `buildSearchTerms`: an up-thumb promotes that title into the next
+ * search, a down-thumb drops it. See pipeline/queries.ts for why thumbs move
+ * search terms rather than scores — the scoring version was measured and it
+ * made the ranking worse.
+ */
+export async function listFeedbackTitles(
+  db: Db,
+  verdict: FeedbackVerdict,
+  limit = 10,
+): Promise<string[]> {
+  const rows = await db.all<{ title: string }>(
+    `SELECT j.title FROM feedback f JOIN jobs j ON j.id = f.job_id
+     WHERE f.verdict = ? ORDER BY f.ts DESC LIMIT ?`,
+    [verdict, limit],
+  );
+  return rows.map((r) => r.title).filter((t) => t.trim() !== "");
+}

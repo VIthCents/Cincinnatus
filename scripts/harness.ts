@@ -403,7 +403,14 @@ async function commandSearch(values: SearchFlags): Promise<number> {
 
   const usaKey = process.env["USAJOBS_API_KEY"];
   const usaAgent = process.env["USAJOBS_USER_AGENT"];
-  const terms = buildSearchTerms(profile);
+  const [promotedTitles, demotedTitles] = await Promise.all([
+    repo.listFeedbackTitles(db, "up"),
+    repo.listFeedbackTitles(db, "down"),
+  ]);
+  const terms = buildSearchTerms(profile, {
+    promoted: promotedTitles,
+    demoted: demotedTitles,
+  });
 
   if (
     usaKey !== undefined &&
