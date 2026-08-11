@@ -12,3 +12,4 @@ public/wasm
 # Recorded API responses. These are verbatim bytes from a real endpoint and
 # must not be reformatted, or they stop being evidence of what the API returned.
 fixtures/raw
+data/crosswalk.json

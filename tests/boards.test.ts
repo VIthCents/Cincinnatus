@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { normalizeUsLocation } from "../src/core/pipeline/states.ts";
 import { normalizeLeverPosting } from "../src/core/sources/lever.ts";
 import { normalizeAshbyPosting } from "../src/core/sources/ashby.ts";
+import { civilianTitlesFor } from "../src/core/profile/crosswalk.ts";
 
 const ctx = { hasher: { sha256Hex: (s: string) => `h(${s})` }, now: 1_700_000_000_000 };
 
@@ -287,5 +288,43 @@ describe("fields the API sends as null, not absent", () => {
     expect(job).not.toBeNull();
     expect(job?.remote).toBeNull();
     expect(job?.location).toBeNull();
+  });
+});
+
+describe("the military-to-civilian crosswalk", () => {
+  /**
+   * O*NET covers 7,178 codes against the 17 written by hand, which is the
+   * difference between an app that understands a handful of common jobs and
+   * one that has something to say to most people who install it.
+   *
+   * But its titles are census categories, not search terms, and for the two
+   * largest combat MOSs they are actively useless: 11B and 0311 map to nothing
+   * but `55-3016.00 Infantry`, and no civilian job posting contains that word.
+   * So the curated entries win, and the generated file fills the tail.
+   */
+  it("keeps the curated answer where there is one", () => {
+    // O*NET says "Heavy and Tractor-Trailer Truck Drivers" for 88M.
+    expect(civilianTitlesFor("88M")[0]).toBe("Truck Driver");
+    expect(civilianTitlesFor("88M")).toContain("CDL Driver");
+  });
+
+  it("never hands a combat MOS the word Infantry to search for", () => {
+    for (const code of ["11B", "0311"]) {
+      const titles = civilianTitlesFor(code);
+      expect(titles.length).toBeGreaterThan(0);
+      expect(titles.map((t) => t.toLowerCase())).not.toContain("infantry");
+      expect(titles).toContain("Security Officer");
+    }
+  });
+
+  it("covers codes nobody wrote by hand", () => {
+    // A Navy machinist's mate, an Air Force code, an Army code — none curated.
+    for (const code of ["MM", "2T131", "91C"]) {
+      expect(civilianTitlesFor(code).length).toBeGreaterThan(0);
+    }
+  });
+
+  it("is still empty for a code that does not exist", () => {
+    expect(civilianTitlesFor("NOTACODE")).toEqual([]);
   });
 });

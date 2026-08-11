@@ -1,3 +1,5 @@
+import crosswalkData from "../../../data/crosswalk.json" with { type: "json" };
+
 /**
  * Military occupation code → civilian job titles.
  *
@@ -6,10 +8,10 @@
  * pipeline works end-to-end, and log a TODO"). It is NOT the full O*NET
  * crosswalk.
  *
- * TODO(crosswalk): replace with output from scripts/build-crosswalk.ts, which
- * transforms O*NET's Military Crosswalk (milx*.csv: SVC branch column, MOC
- * code, and up to four parallel O*NET-SOC slots per row) into a vendored
- * crosswalk.json. O*NET data is CC BY 4.0 and requires attribution when shipped.
+ * COVERAGE. The 17 entries below are hand-written; data/crosswalk.json adds
+ * 7,178 more, generated from O*NET by scripts/build-crosswalk.ts. The hand-
+ * written ones override the generated ones, because they were chosen against
+ * what a veteran actually types into a job search.
  *
  * Entries are keyed by bare code, upper-cased. Codes collide across branches —
  * a four-digit USMC MOS can equal a Navy officer designator — so the generated
@@ -237,18 +239,71 @@ export const CROSSWALK: readonly CrosswalkEntry[] = [
   },
 ];
 
+/**
+ * The generated long tail, from O*NET's Military Crosswalk (CC BY 4.0). 7,178
+ * codes against the 17 written by hand here, which is the difference between
+ * an app that understands a handful of common jobs and one that has something
+ * to say to most people who install it.
+ *
+ * See scripts/build-crosswalk.ts for how it is produced, and in particular for
+ * why O*NET-SOC 55-* is thrown away: that is the "Military Specific" group,
+ * and 11B and 0311 map to nothing but `55-3016.00 Infantry`. Importing it
+ * would have told the two largest combat MOSs to go and search job boards for
+ * the word "Infantry".
+ */
+/**
+ * The generated long tail: 7,178 codes against the 17 written by hand, which
+ * is the difference between an app that understands a handful of common jobs
+ * and one that has something to say to most people who install it.
+ *
+ * Built on first use, not at import. The packed form is one string literal, so
+ * a test file that never looks up a code pays nothing to load it.
+ *
+ * See scripts/build-crosswalk.ts for why O*NET-SOC 55-* is thrown away: that
+ * is the "Military Specific" group, and 11B and 0311 map to nothing but
+ * 55-3016.00 Infantry. Importing it would have told the two largest combat
+ * MOSs to search job boards for the word "Infantry".
+ */
+let generatedTable: Map<string, readonly string[]> | null = null;
+
+function generatedTitlesFor(code: string): readonly string[] {
+  if (generatedTable === null) {
+    generatedTable = new Map();
+    const { titles: titleBlob, packed } = crosswalkData as {
+      readonly titles: string;
+      readonly packed: string;
+    };
+    const titles = titleBlob.split("\n");
+    for (const line of packed.split("\n")) {
+      const tab = line.indexOf("\t");
+      if (tab <= 0) continue;
+      const forCode = line
+        .slice(tab + 1)
+        .split(",")
+        .map((index: string) => titles[Number(index)] ?? "")
+        .filter((title: string) => title !== "");
+      generatedTable.set(line.slice(0, tab), forCode);
+    }
+  }
+  return generatedTable.get(code) ?? [];
+}
+
+/**
+ * Hand-written entries win outright.
+ *
+ * They were chosen against what a veteran actually types into a job search,
+ * and they beat the generated ones head to head: O*NET calls 88M "Heavy and
+ * Tractor-Trailer Truck Drivers"; the entry above says "Truck Driver", "CDL
+ * Driver", "Delivery Driver". More coverage is worth having, but not at the
+ * cost of a considered answer.
+ */
 const BY_CODE: ReadonlyMap<string, CrosswalkEntry> = new Map(
   CROSSWALK.map((entry) => [entry.code.toUpperCase(), entry]),
 );
 
-/**
- * Civilian titles for a military code, or an empty array if we do not know it.
- *
- * Returning nothing is correct for an unknown code — inventing plausible titles
- * would put words in the veteran's mouth that their record does not support.
- */
 export function civilianTitlesFor(code: string): readonly string[] {
-  return BY_CODE.get(code.trim().toUpperCase())?.civilianTitles ?? [];
+  const key = code.trim().toUpperCase();
+  return BY_CODE.get(key)?.civilianTitles ?? generatedTitlesFor(key);
 }
 
 export function crosswalkEntryFor(code: string): CrosswalkEntry | null {
