@@ -1,0 +1,25 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "windows": {
+      "signCommand": {
+        "cmd": "signtool",
+        "args": [
+          "sign",
+          "/v",
+          "/fd",
+          "SHA256",
+          "/tr",
+          "http://timestamp.acs.microsoft.com",
+          "/td",
+          "SHA256",
+          "/dlib",
+          "tools/Microsoft.ArtifactSigning.Client/bin/x64/Azure.CodeSigning.Dlib.dll",
+          "/dmdf",
+          "signing-metadata.json",
+          "%1"
+        ]
+      }
+    }
+  }
+}

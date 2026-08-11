@@ -1096,3 +1096,60 @@ stored vector added to `export-eval.ts` output (it already selects it and discar
 stratum of the vector neighbours of thumbed jobs, then a _harm_ gate: feedback must not lower NDCG. The
 measurement above proves known-good jobs get demoted; it cannot see whether the promoted unknowns are
 good, because they are unlabelled by construction.
+
+---
+
+## 2026-08-11 — Signed installers, and the names that changed underneath them
+
+**Context.** Hawkseye Inc has an Apple Developer account and an Azure code-signing account, which
+unblocks distribution — and unblocks the macOS keychain problem recorded above, since keychain item
+ACLs bind to a stable signing identity.
+
+**The single most important finding is a rename.** Azure Trusted Signing became **Azure Artifact
+Signing** when it went GA on 2026-01-14. The documentation moved, `Azure/trusted-signing-action`
+became `Azure/artifact-signing-action`, the RBAC role became "**Artifact** Signing Certificate Profile
+Signer", and `trusted-signing-cli` became `artifact-signing-cli`. Every guide written before 2026 uses
+dead names. The underlying resources are unchanged — still the `Microsoft.CodeSigning` provider and
+`*.codesigning.azure.net` endpoints.
+
+**Decisions.**
+
+_Signing never gates a build._ `src-tauri/tauri.conf.json` produces an unsigned app that anyone can
+build with no credentials; `src-tauri/tauri.release.conf.json` adds `signCommand` and is passed
+explicitly by the release workflow. A contributor, a pull request from a fork, and a fresh clone all
+keep working. This also means the fork that holds the credentials is the only place that needs them.
+
+_Windows signs through `signtool`, not the action._ `azure/artifact-signing-action` signs files already
+on disk, so used alone it signs the NSIS installer and leaves `Cincinnatus.exe` unsigned **inside it**.
+Driving signing through Tauri's `signCommand` signs every binary as the bundler produces it.
+`artifact-signing-cli` — what the Tauri docs show — hard-requires a client secret and cannot use OIDC,
+so authentication is `azure/login@v3` federated credentials and no client secret is stored anywhere.
+
+Two `signCommand` traps, both from reading the source rather than the docs: `%1` is matched by exact
+whole-argument equality, so it must be its own array element (`--file=%1` is passed through literally),
+and any non-`%1` relative path that exists on disk is silently rewritten to an absolute one.
+
+_NSIS installs per user._ `installMode: "currentUser"` puts the app in `%LOCALAPPDATA%`, so neither
+installing nor updating raises a UAC prompt. For someone who has been told to be careful about what
+they download, an admin prompt is a reason to stop.
+
+_macOS uses the App Store Connect API key_ rather than Apple ID plus app-specific password: it survives
+password changes and two-factor prompts. Note two things that cost time to find — Tauri's
+`APPLE_API_KEY` is the Key **ID**, not key material, and `KEYCHAIN_PASSWORD`, listed as required in
+Tauri's own documentation, is read nowhere in `tauri`, `tauri-cli`, `tauri-bundler` or
+`tauri-macos-sign`. The bundler imports the `.p12` itself and no keychain is created by hand.
+
+_The disk image is notarized explicitly._ Tauri notarizes and staples the `.app` but only **signs** the
+`.dmg` (tauri-apps/tauri#7533). Since macOS 10.15 an un-notarized disk image under Developer ID is
+refused, and the `.dmg` is the file a person double-clicks.
+
+**Consequence, and the reason for the verification steps: the bundler does not fail when signing is
+misconfigured — it warns and exits 0.** A release would ship unsigned and nobody would know until a
+veteran saw a security warning. Both jobs now assert signatures before anything is uploaded, and the
+release is a draft so a human installs it on a clean machine first.
+
+**Deliberately not built: automatic updates.** The app is still changing and the user asked for build
+and signing only. It is also not a free addition — an update check on launch is new recurring egress to
+github.com, and SPEC §3 and PRIVACY.md promise that the only things leaving the machine are search
+terms to job APIs and Anthropic calls when a key is present. That promise must be amended in plain
+words, and the check should probably be opt-in on the wizard, before any code is written.

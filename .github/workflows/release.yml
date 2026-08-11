@@ -1,0 +1,219 @@
+name: Release
+
+# Signed installers for Windows and macOS.
+#
+# WHERE THIS RUNS. Builds happen on the discohonesdidit fork of
+# VIthCents/Cincinnatus, because that is where the signing credentials live.
+# GitHub repository secrets do not cross repositories on a personal account, so
+# they must be set on the fork itself — see docs/RELEASING.md for the list.
+#
+# WHY NOT IN ci.yml. Signing must never be required to build. A contributor, a
+# pull request from a fork, and anyone who just cloned the repo all run
+# `pnpm tauri build` with no credentials and get an unsigned app. Signing lives
+# here, behind a tag, and is switched on by a separate config file
+# (src-tauri/tauri.release.conf.json) that the default build never reads.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  # Azure Artifact Signing authenticates by OIDC federation. No client secret
+  # is stored anywhere.
+  id-token: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    name: Windows — build, sign, verify
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: pnpm install --frozen-lockfile
+
+      # The Artifact Signing dlib is a .NET 8 component.
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0"
+
+      # signtool is pinned rather than taken from the runner image: the dlib
+      # requires Windows SDK >= 10.0.22621.755 and refuses to load against the
+      # 20348 SDK that some images still ship.
+      - name: Install signing tools
+        shell: pwsh
+        run: |
+          nuget install Microsoft.Windows.SDK.BuildTools -x -o tools
+          nuget install Microsoft.ArtifactSigning.Client -x -o tools
+          $sdk = Get-ChildItem tools\Microsoft.Windows.SDK.BuildTools\bin -Directory |
+                 Sort-Object Name -Descending | Select-Object -First 1
+          Join-Path $sdk.FullName 'x64' | Out-File $env:GITHUB_PATH -Append -Encoding utf8
+
+      - name: Write Artifact Signing metadata
+        shell: pwsh
+        run: |
+          @{
+            Endpoint               = '${{ vars.AZURE_SIGNING_ENDPOINT }}'
+            CodeSigningAccountName = '${{ vars.AZURE_SIGNING_ACCOUNT }}'
+            CertificateProfileName = '${{ vars.AZURE_SIGNING_PROFILE }}'
+            # Fall straight through to the azure/login OIDC session. Leaving the
+            # other credential types in costs about 30 seconds of timeouts on
+            # every signed file, and there are several per build.
+            ExcludeCredentials = @(
+              'ManagedIdentityCredential','WorkloadIdentityCredential',
+              'SharedTokenCacheCredential','VisualStudioCredential',
+              'VisualStudioCodeCredential','AzurePowerShellCredential',
+              'AzureDeveloperCliCredential','InteractiveBrowserCredential')
+          } | ConvertTo-Json | Out-File signing-metadata.json -Encoding utf8
+
+      # Azure Artifact Signing — renamed from Azure Trusted Signing when it went
+      # GA in January 2026. The account still lives under the
+      # Microsoft.CodeSigning provider, but the docs, the action and the RBAC
+      # role ("Artifact Signing Certificate Profile Signer") all changed names.
+      #
+      # Federated OIDC: the token is minted per run and expires. No long-lived
+      # client secret is stored, and a pull request from a fork cannot reach
+      # this job at all.
+      - uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Build and sign
+        run: pnpm tauri build --config src-tauri/tauri.release.conf.json
+
+      # The bundler does NOT fail when signing is misconfigured — it warns and
+      # exits 0. Without this gate a release ships unsigned and nobody notices
+      # until a veteran sees a SmartScreen warning.
+      - name: Refuse to publish anything unsigned
+        shell: pwsh
+        run: |
+          $bad = @()
+          Get-ChildItem -Recurse -Include *.exe `
+            src-tauri/target/release/bundle, src-tauri/target/release/Cincinnatus.exe |
+            ForEach-Object {
+              $sig = Get-AuthenticodeSignature $_.FullName
+              if ($sig.Status -ne "Valid") { $bad += "$($_.Name): $($sig.Status)" }
+            }
+          if ($bad.Count -gt 0) {
+            Write-Error "Unsigned or invalid artifacts:`n$($bad -join "`n")"
+            exit 1
+          }
+          Write-Host "All Windows artifacts carry a valid signature."
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: |
+            src-tauri/target/release/bundle/nsis/*.exe
+
+  macos:
+    name: macOS — build, sign, notarize, staple
+    runs-on: macos-15
+    timeout-minutes: 120
+    env:
+      APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      APPLE_SIGNING_IDENTITY: ${{ vars.APPLE_SIGNING_IDENTITY }}
+      # Confusingly, Tauri's APPLE_API_KEY is the Key ID, not key material.
+      APPLE_API_KEY: ${{ secrets.APPLE_API_KEY_ID }}
+      APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: pnpm install --frozen-lockfile
+
+      # tauri-bundler imports the .p12 itself. Hand-rolling `security
+      # create-keychain` in YAML is the usual way this goes wrong, and
+      # KEYCHAIN_PASSWORD — which Tauri's own docs list as required — is read
+      # nowhere in tauri, tauri-cli or tauri-bundler.
+      - name: Place the App Store Connect key
+        run: |
+          mkdir -p "$RUNNER_TEMP/private_keys"
+          echo "${{ secrets.APPLE_API_KEY_P8_BASE64 }}" | base64 --decode \
+            > "$RUNNER_TEMP/private_keys/AuthKey_${{ secrets.APPLE_API_KEY_ID }}.p8"
+          echo "APPLE_API_KEY_PATH=$RUNNER_TEMP/private_keys/AuthKey_${{ secrets.APPLE_API_KEY_ID }}.p8" >> "$GITHUB_ENV"
+
+      - name: Build, sign and notarize
+        run: pnpm tauri build --target universal-apple-darwin --config src-tauri/tauri.release.conf.json
+
+      # Tauri notarizes and staples the .app but only SIGNS the .dmg
+      # (tauri-apps/tauri#7533). The .dmg is the file a veteran double-clicks,
+      # and since macOS 10.15 an un-notarized one distributed with Developer ID
+      # is refused. Close it by hand.
+      - name: Notarize and staple the disk image
+        run: |
+          set -euo pipefail
+          DMG=$(find src-tauri/target/universal-apple-darwin/release/bundle/dmg -name '*.dmg' | head -1)
+          xcrun notarytool submit "$DMG" \
+            --key "$APPLE_API_KEY_PATH" \
+            --key-id "${{ secrets.APPLE_API_KEY_ID }}" \
+            --issuer "${{ secrets.APPLE_API_ISSUER }}" \
+            --wait
+          xcrun stapler staple "$DMG"
+
+      # Same reason as Windows: missing credentials make the bundler skip
+      # signing silently and exit 0.
+      - name: Refuse to publish anything unsigned or un-notarized
+        run: |
+          set -euo pipefail
+          APP=$(find src-tauri/target/universal-apple-darwin/release/bundle/macos -name '*.app' | head -1)
+          DMG=$(find src-tauri/target/universal-apple-darwin/release/bundle/dmg -name '*.dmg' | head -1)
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          # "accepted" plus "Notarized Developer ID" is the pair that means a
+          # first-time download opens without a Gatekeeper block.
+          spctl --assess --type execute --verbose=4 "$APP" 2>&1 | tee /tmp/app.txt
+          grep -q "accepted" /tmp/app.txt
+          grep -q "Notarized Developer ID" /tmp/app.txt
+          xcrun stapler validate "$APP"
+          xcrun stapler validate "$DMG"
+          echo "App and disk image are signed, notarized and stapled."
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: |
+            src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+
+  publish:
+    name: Draft the release
+    needs: [windows, macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      # Draft, never published automatically: a human checks the installers
+      # open on a clean machine before anyone is asked to download one.
+      - uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          files: artifacts/**/*
+          generate_release_notes: true
