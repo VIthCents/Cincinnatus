@@ -309,3 +309,110 @@ body,
 .cn-jobcard__vialink:hover {
   color: var(--text-link-hover);
 }
+
+/* "Did you apply?" — the one question the app cannot answer for itself.
+   A well, not a banner: it belongs to this card and goes away either way. */
+.cn-jobcard__ask {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3) var(--space-5);
+  padding: var(--space-4) var(--space-5);
+  border-radius: var(--radius-control);
+  background: var(--surface-sunken);
+}
+
+.cn-jobcard__askq {
+  font-size: var(--body-size);
+  font-weight: var(--weight-semibold);
+  color: var(--text-strong);
+}
+
+.cn-jobcard__askacts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin-left: auto;
+}
+
+/* Green, because it is the one fact on a job card that is good news. */
+.cn-jobcard__meta span.cn-jobcard__applied {
+  font-weight: var(--weight-semibold);
+  color: var(--success-text);
+}
+
+/* -----------------------------------------------------------------------
+   My applications — the record of what the veteran sent.
+   Deliberately the job card's shape at a smaller weight: it is the same
+   job, seen later, so it should not read as a different kind of thing.
+   ----------------------------------------------------------------------- */
+.cn-applist {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.cn-appcard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-6);
+  border: var(--border-width) solid var(--border-hairline);
+  border-radius: var(--radius-card);
+  background: var(--surface-card);
+}
+
+.cn-appcard__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-6);
+}
+
+.cn-appcard__title {
+  font-size: var(--title-2-size);
+  font-weight: var(--title-2-weight);
+  line-height: var(--title-2-line);
+  letter-spacing: var(--title-2-track);
+  color: var(--text-strong);
+}
+
+.cn-appcard__org {
+  margin-top: 2px;
+  font-size: var(--body-size);
+  color: var(--text-body);
+}
+
+.cn-appcard__status {
+  flex: none;
+  padding: var(--space-1) var(--space-4);
+  border: var(--border-width) solid var(--primary-subtle-border);
+  border-radius: var(--radius-control);
+  background: var(--primary-subtle);
+  font-size: var(--body-sm-size);
+  font-weight: var(--weight-semibold);
+  color: var(--primary-text);
+}
+
+.cn-appcard__when {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--body-sm-size);
+  color: var(--text-muted);
+}
+
+.cn-appcard__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.cn-appcard__foot .cn-appcard__spacer {
+  flex: 1;
+}

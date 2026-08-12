@@ -1,6 +1,8 @@
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useEffect, useState } from "react";
 import { getMonthSpend, spendInWords } from "../../core/app/spend.ts";
+import { quotaStatus, quotaWords } from "../../core/app/quota.ts";
+import { ADZUNA_QUOTA } from "../../core/config.ts";
 import {
   DEFAULT_INTERVAL_HOURS,
   getIntervalHours,
@@ -20,11 +22,11 @@ import { tauriClock } from "../../tauri/clock.ts";
 import * as repo from "../../core/db/repo.ts";
 import {
   db,
-  hasAdzunaKeys,
   validateAdzunaKeys,
   validateAnthropicKey,
   validateUsaJobsKey,
 } from "../app/services.ts";
+import { consumeSectionJump } from "../app/jump.ts";
 import { isThemePreference } from "../app/theme.ts";
 import { useAppDispatch, useAppState } from "../app/state.tsx";
 import { Icon } from "../components/Icon.tsx";
@@ -54,6 +56,20 @@ export function SettingsTab() {
   useEffect(() => {
     void getMonthSpend(db, tauriClock.now()).then((usd) => setSpend(spendInWords(usd)));
     void getIntervalHours(db).then(setInterval_);
+  }, []);
+
+  useEffect(() => {
+    // Another screen may have asked for a specific section — the "Show me
+    // how" button on the Jobs tab does. Runs after mount because switching
+    // tabs remounts this whole panel. Focus, not just scroll, so a screen
+    // reader announces where the jump landed (same reasoning as the wizard's
+    // step focus).
+    const id = consumeSectionJump();
+    if (id === null) return;
+    const el = document.getElementById(id);
+    if (el === null) return;
+    el.scrollIntoView({ block: "start" });
+    el.focus();
   }, []);
 
   return (
@@ -89,9 +105,14 @@ export function SettingsTab() {
         />
       </section>
 
-      <section className="set">
+      <section className="set" id="more-jobs" tabIndex={-1}>
         <h3>More job listings</h3>
-        <AdzunaSection />
+        <AdzunaSection
+          connected={state.keys.adzuna}
+          onChanged={(connected) =>
+            dispatch({ type: "keys", keys: { ...state.keys, adzuna: connected } })
+          }
+        />
       </section>
 
       <section className="set">
@@ -198,8 +219,15 @@ function AiKeySection({
       ) : (
         <p className="prose">
           Not connected. The AI helper reads resumes and writes documents. Get a key at{" "}
-          <strong>console.anthropic.com</strong> — the developer site, not the Claude
-          chat app. A Claude Pro or Max chat plan does not include one.
+          <button
+            type="button"
+            className="cn-jobcard__vialink"
+            onClick={() => void openUrl("https://console.anthropic.com/")}
+          >
+            console.anthropic.com
+          </button>{" "}
+          — the developer site, not the Claude chat app. A Claude Pro or Max chat plan
+          does not include one.
         </p>
       )}
       <TextField
@@ -277,7 +305,14 @@ function UsaJobsSection({
       ) : (
         <p className="prose">
           Free. Unlocks federal jobs, where veterans get hiring preference. Sign up at{" "}
-          <strong>developer.usajobs.gov/apirequest</strong> — they email you a key.
+          <button
+            type="button"
+            className="cn-jobcard__vialink"
+            onClick={() => void openUrl("https://developer.usajobs.gov/apirequest/")}
+          >
+            developer.usajobs.gov/apirequest
+          </button>{" "}
+          — they email you a key.
         </p>
       )}
       <TextField
@@ -324,16 +359,31 @@ function UsaJobsSection({
  * numbered steps name the exact dropdown option, because picking the wrong one
  * puts the account on a 14-day trial that expires without telling anyone.
  */
-function AdzunaSection() {
+function AdzunaSection({
+  connected,
+  onChanged,
+}: {
+  connected: boolean;
+  onChanged: (connected: boolean) => void;
+}) {
   const [appId, setAppId] = useState("");
   const [appKey, setAppKey] = useState("");
-  const [connected, setConnected] = useState(false);
   const [checking, setChecking] = useState(false);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const [quotaNote, setQuotaNote] = useState<string | null>(null);
 
   useEffect(() => {
-    void hasAdzunaKeys().then(setConnected);
-  }, []);
+    // Adzuna has a daily and monthly ceiling. On a day the ledger is spent,
+    // "More job listings are on" would be a lie — say what the harness says
+    // instead: which limit was hit and when it comes back.
+    if (!connected) {
+      setQuotaNote(null);
+      return;
+    }
+    void quotaStatus(db, "adzuna", ADZUNA_QUOTA, tauriClock.now()).then((quota) => {
+      setQuotaNote(quota.exhausted === null ? null : quotaWords(quota.exhausted));
+    });
+  }, [connected]);
 
   async function save() {
     setChecking(true);
@@ -349,7 +399,7 @@ function AdzunaSection() {
       });
       setAppId("");
       setAppKey("");
-      setConnected(true);
+      onChanged(true);
     } else {
       setMessage({ ok: false, text: outcome.message });
     }
@@ -357,7 +407,11 @@ function AdzunaSection() {
 
   return (
     <div className="stack">
-      {connected ? (
+      {connected && quotaNote !== null ? (
+        <Banner tone="info" title="Taking a short break.">
+          {quotaNote}
+        </Banner>
+      ) : connected ? (
         <Banner tone="success" title="More job listings are on.">
           You are seeing driving, warehouse and trades jobs as well as the ones from
           company job boards.
@@ -433,6 +487,21 @@ function AdzunaSection() {
         >
           {checking ? "Checking" : "Save and turn on more jobs"}
         </PrimaryButton>
+        {connected && (
+          <QuietButton
+            onClick={() => {
+              void Promise.all([
+                setSecret(SECRET_ADZUNA_APP_ID, ""),
+                setSecret(SECRET_ADZUNA_APP_KEY, ""),
+              ]).then(() => {
+                setMessage({ ok: true, text: "The numbers were removed." });
+                onChanged(false);
+              });
+            }}
+          >
+            Remove these numbers
+          </QuietButton>
+        )}
       </div>
       <p className="prose--muted">
         These jobs are gathered by Adzuna from around the web, so a few may be older or

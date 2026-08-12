@@ -41,10 +41,13 @@ import {
 export function PrepareDialog({
   job,
   baseResume,
+  onApplyOpened,
   onClose,
 }: {
   job: Job;
   baseResume: ResumeData;
+  /** Applying from here asks the same "did you apply?" question the card does. */
+  onApplyOpened: () => void;
   onClose: () => void;
 }) {
   const print = usePrint();
@@ -236,7 +239,17 @@ export function PrepareDialog({
             <div className="row">
               <PrimaryButton
                 iconEnd="open_in_new"
-                onClick={() => void openUrl(job.url)}
+                onClick={() => {
+                  // The dialog closes behind them: "did you apply?" belongs on
+                  // the job card, which is what they come back to.
+                  void openUrl(job.url).then(
+                    () => {
+                      onApplyOpened();
+                      onClose();
+                    },
+                    () => undefined,
+                  );
+                }}
               >
                 Apply — opens the job in your browser
               </PrimaryButton>

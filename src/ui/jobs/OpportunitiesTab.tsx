@@ -4,7 +4,9 @@ import type { RankedJob } from "../../core/types.ts";
 import * as repo from "../../core/db/repo.ts";
 
 import { tauriClock } from "../../tauri/clock.ts";
+import { dismissAdzunaNudge, shouldOfferMoreJobs } from "../../core/app/nudge.ts";
 import { db } from "../app/services.ts";
+import { requestSectionJump } from "../app/jump.ts";
 import { runSearchNow } from "../app/searchRunner.ts";
 import { ageWords, matchLevel, salaryWords, whyWords } from "../app/format.ts";
 import { useAppDispatch, useAppState } from "../app/state.tsx";
@@ -53,6 +55,15 @@ export function OpportunitiesTab() {
   const [preparing, setPreparing] = useState<RankedJob | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [shown, setShown] = useState(25);
+  // The one job whose posting was just opened, and which is therefore being
+  // asked "did you apply?". Deliberately not persisted: an unanswered question
+  // is gone at the next launch rather than waiting to be asked again.
+  const [asked, setAsked] = useState<string | null>(null);
+
+  const applied = useMemo(
+    () => new Set(state.applications.map((a) => a.job.id)),
+    [state.applications],
+  );
 
   const visible = useMemo(() => {
     if (state.ranked === null) return [];
@@ -124,6 +135,44 @@ export function OpportunitiesTab() {
           Only {state.lastReport?.reachable ?? 0} jobs matched close to you, so
           Cincinnatus also looked across the country. Jobs outside your area say so on
           the card.
+        </Banner>
+      )}
+
+      {shouldOfferMoreJobs({
+        hasSearched: state.hasSearched,
+        searching: state.searching,
+        adzunaConnected: state.keys.adzuna,
+        dismissed: state.adzunaNudgeDismissed,
+      }) && (
+        <Banner
+          tone="info"
+          title="Want driving, warehouse and trades jobs too?"
+          actions={
+            <>
+              <Button
+                size="md"
+                icon="work"
+                onClick={() => {
+                  requestSectionJump("more-jobs");
+                  dispatch({ type: "tab", tab: "settings" });
+                }}
+              >
+                Show me how
+              </Button>
+              <QuietButton
+                size="md"
+                onClick={() => {
+                  dispatch({ type: "adzuna_nudge_dismissed" });
+                  void dismissAdzunaNudge(db);
+                }}
+              >
+                No thanks
+              </QuietButton>
+            </>
+          }
+        >
+          It is free and takes about 5 minutes. If you say no thanks, this note goes
+          away for good.
         </Banner>
       )}
 
@@ -202,6 +251,10 @@ export function OpportunitiesTab() {
               key={ranked.job.id}
               ranked={ranked}
               expanded={expanded === ranked.job.id}
+              applied={applied.has(ranked.job.id)}
+              asked={asked === ranked.job.id}
+              onApplyOpened={() => setAsked(ranked.job.id)}
+              onDismissAsk={() => setAsked(null)}
               onToggle={() =>
                 setExpanded(expanded === ranked.job.id ? null : ranked.job.id)
               }
@@ -220,7 +273,11 @@ export function OpportunitiesTab() {
       )}
 
       {preparing !== null && (
-        <PrepareGate ranked={preparing} onClose={() => setPreparing(null)} />
+        <PrepareGate
+          ranked={preparing}
+          onApplyOpened={() => setAsked(preparing.job.id)}
+          onClose={() => setPreparing(null)}
+        />
       )}
     </div>
   );
@@ -292,11 +349,19 @@ function Fact({
 function JobCard({
   ranked,
   expanded,
+  applied,
+  asked,
+  onApplyOpened,
+  onDismissAsk,
   onToggle,
   onPrepare,
 }: {
   ranked: RankedJob;
   expanded: boolean;
+  applied: boolean;
+  asked: boolean;
+  onApplyOpened: () => void;
+  onDismissAsk: () => void;
   onToggle: () => void;
   onPrepare: () => void;
 }) {
@@ -330,6 +395,26 @@ function JobCard({
     void repo.saveFeedback(db, job.id, "hidden", tauriClock.now());
   }
 
+  function apply() {
+    void openUrl(job.url).then(
+      // Asked only once the posting is actually up, so the question always
+      // follows something the person saw.
+      onApplyOpened,
+      // The browser never opened, so there is nothing to have applied to.
+      () => undefined,
+    );
+  }
+
+  function confirmApplied() {
+    const now = tauriClock.now();
+    dispatch({
+      type: "applied",
+      application: { job, status: "applied", appliedAt: now, updatedAt: now },
+    });
+    onDismissAsk();
+    void repo.saveApplication(db, job.id, now);
+  }
+
   const where = `${job.title} at ${job.company}`;
   // Adzuna is an aggregator: its link opens Adzuna, not the employer. The
   // button must not promise otherwise — that promise is most of what this
@@ -354,6 +439,16 @@ function JobCard({
       </div>
 
       <div className="cn-jobcard__meta">
+        {/* First, because it is the one fact here about the person rather
+            than the posting — and because the job stays in this list after
+            they apply. A job that vanished when they pressed a button would
+            be a disappearance they cannot explain or undo. */}
+        {applied && (
+          <span className="cn-jobcard__applied">
+            <Icon name="check_circle" size={18} />
+            You applied
+          </span>
+        )}
         <Fact
           icon="location_on"
           known={job.location !== null}
@@ -435,6 +530,27 @@ function JobCard({
         </div>
       )}
 
+      {/* Cincinnatus cannot see whether anyone applied — it opened a browser,
+          and that is the whole of what it knows (constraint 2). So it asks,
+          once, and takes the answer at face value. "Not yet" leaves no trace. */}
+      {asked && !applied && (
+        <div
+          className="cn-jobcard__ask"
+          role="group"
+          aria-label={`Did you apply for ${where}?`}
+        >
+          <p className="cn-jobcard__askq">Did you apply to this job?</p>
+          <div className="cn-jobcard__askacts">
+            <Button variant="primary" size="md" icon="check" onClick={confirmApplied}>
+              Yes, I applied
+            </Button>
+            <QuietButton size="md" onClick={onDismissAsk}>
+              Not yet
+            </QuietButton>
+          </div>
+        </div>
+      )}
+
       <div className="cn-jobcard__foot">
         {/* With no AI key there is no Prepare — a disabled primary button is a
             nag drawn permanently. Apply is promoted instead
@@ -454,7 +570,7 @@ function JobCard({
               variant="secondary"
               size="md"
               iconEnd="open_in_new"
-              onClick={() => void openUrl(job.url)}
+              onClick={apply}
               ariaLabel={applyDestination}
             >
               Apply
@@ -465,7 +581,7 @@ function JobCard({
             variant="primary"
             size="md"
             iconEnd="open_in_new"
-            onClick={() => void openUrl(job.url)}
+            onClick={apply}
             ariaLabel={applyDestination}
           >
             Apply
@@ -504,7 +620,15 @@ function JobCard({
 }
 
 /** The prepare button needs a base resume; explain kindly when there is none. */
-function PrepareGate({ ranked, onClose }: { ranked: RankedJob; onClose: () => void }) {
+function PrepareGate({
+  ranked,
+  onApplyOpened,
+  onClose,
+}: {
+  ranked: RankedJob;
+  onApplyOpened: () => void;
+  onClose: () => void;
+}) {
   const state = useAppState();
   const dispatch = useAppDispatch();
 
@@ -535,5 +659,12 @@ function PrepareGate({ ranked, onClose }: { ranked: RankedJob; onClose: () => vo
     );
   }
 
-  return <PrepareDialog job={ranked.job} baseResume={state.resume} onClose={onClose} />;
+  return (
+    <PrepareDialog
+      job={ranked.job}
+      baseResume={state.resume}
+      onApplyOpened={onApplyOpened}
+      onClose={onClose}
+    />
+  );
 }

@@ -9,13 +9,21 @@ import {
 } from "react";
 import { INITIAL_PROGRESS, type SearchProgress } from "../../core/app/progress.ts";
 import { isThemePreference, type ThemePreference } from "./theme.ts";
-import type { Profile, RankedJob, RunReport } from "../../core/types.ts";
+import type {
+  ApplicationStatus,
+  Profile,
+  RankedJob,
+  RunReport,
+  TrackedApplication,
+} from "../../core/types.ts";
 import type { ResumeData } from "../../core/documents/types.ts";
 import { verifyResume } from "../../core/documents/verify.ts";
 import * as repo from "../../core/db/repo.ts";
+import { isAdzunaNudgeDismissed } from "../../core/app/nudge.ts";
 import {
   db,
   ensureDbReady,
+  hasAdzunaKeys,
   hasAnthropicKey,
   hasUsaJobsKey,
   loadLastRanking,
@@ -27,7 +35,7 @@ import {
  * dispatch what changed.
  */
 
-export type Tab = "chat" | "jobs" | "settings";
+export type Tab = "chat" | "jobs" | "applications" | "settings";
 
 export interface ChatEntry {
   readonly id: string;
@@ -48,7 +56,7 @@ export interface AppState {
   readonly tab: Tab;
   readonly resume: ResumeData | null;
   readonly profile: Profile | null;
-  readonly keys: { anthropic: boolean; usajobs: boolean };
+  readonly keys: { anthropic: boolean; usajobs: boolean; adzuna: boolean };
   readonly ranked: readonly RankedJob[] | null;
   readonly lastReport: RunReport | null;
   readonly searching: boolean;
@@ -62,9 +70,13 @@ export interface AppState {
    * lie, so it stops being shown.
    */
   readonly hasSearched: boolean;
+  /** True once the person has said "no thanks" to the Adzuna offer. Permanent. */
+  readonly adzunaNudgeDismissed: boolean;
   readonly hidden: ReadonlySet<string>;
   /** The veteran's saved 👍/👎 per job, restored across launches. */
   readonly feedback: ReadonlyMap<string, "up" | "down">;
+  /** The jobs they told us they applied to, newest first. */
+  readonly applications: readonly TrackedApplication[];
   readonly chat: readonly ChatEntry[];
   readonly chatBusy: boolean;
   readonly theme: ThemePreference;
@@ -77,15 +89,17 @@ const initialState: AppState = {
   tab: "chat",
   resume: null,
   profile: null,
-  keys: { anthropic: false, usajobs: false },
+  keys: { anthropic: false, usajobs: false, adzuna: false },
   ranked: null,
   lastReport: null,
   searching: false,
   progress: INITIAL_PROGRESS,
   searchStatus: "",
   hasSearched: false,
+  adzunaNudgeDismissed: false,
   hidden: new Set(),
   feedback: new Map(),
+  applications: [],
   chat: [],
   chatBusy: false,
   theme: "system",
@@ -97,11 +111,13 @@ export type Action =
       needsWizard: boolean;
       resume: ResumeData | null;
       profile: Profile | null;
-      keys: { anthropic: boolean; usajobs: boolean };
+      keys: { anthropic: boolean; usajobs: boolean; adzuna: boolean };
       ranked: readonly RankedJob[] | null;
       hasSearched: boolean;
+      adzunaNudgeDismissed: boolean;
       hidden: ReadonlySet<string>;
       feedback: ReadonlyMap<string, "up" | "down">;
+      applications: readonly TrackedApplication[];
       chat: readonly ChatEntry[];
       theme: ThemePreference;
     }
@@ -110,7 +126,8 @@ export type Action =
   | { type: "wizard_done"; profile: Profile }
   | { type: "resume"; resume: ResumeData }
   | { type: "profile"; profile: Profile }
-  | { type: "keys"; keys: { anthropic: boolean; usajobs: boolean } }
+  | { type: "keys"; keys: { anthropic: boolean; usajobs: boolean; adzuna: boolean } }
+  | { type: "adzuna_nudge_dismissed" }
   | { type: "search_start" }
   | { type: "search_progress"; progress: SearchProgress }
   | { type: "feedback"; jobId: string; verdict: "up" | "down" | null }
@@ -122,6 +139,14 @@ export type Action =
     }
   | { type: "search_failed"; message: string }
   | { type: "hide_job"; jobId: string }
+  | { type: "applied"; application: TrackedApplication }
+  | {
+      type: "application_status";
+      jobId: string;
+      status: ApplicationStatus;
+      now: number;
+    }
+  | { type: "application_removed"; jobId: string }
   | { type: "chat_add"; entry: ChatEntry }
   | { type: "chat_busy"; busy: boolean }
   | { type: "theme"; theme: ThemePreference };
@@ -139,8 +164,10 @@ function reducer(state: AppState, action: Action): AppState {
         keys: action.keys,
         ranked: action.ranked,
         hasSearched: action.hasSearched,
+        adzunaNudgeDismissed: action.adzunaNudgeDismissed,
         hidden: action.hidden,
         feedback: action.feedback,
+        applications: action.applications,
         chat: action.chat,
         theme: action.theme,
       };
@@ -156,6 +183,8 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, profile: action.profile };
     case "keys":
       return { ...state, keys: action.keys };
+    case "adzuna_nudge_dismissed":
+      return { ...state, adzunaNudgeDismissed: true };
     case "search_start":
       return {
         ...state,
@@ -188,6 +217,26 @@ function reducer(state: AppState, action: Action): AppState {
       else feedback.set(action.jobId, action.verdict);
       return { ...state, feedback };
     }
+    case "applied": {
+      // Mirrors the ON CONFLICT DO NOTHING in repo.saveApplication: confirming
+      // again must not reset a job that has since reached "interview".
+      const id = action.application.job.id;
+      if (state.applications.some((a) => a.job.id === id)) return state;
+      return { ...state, applications: [action.application, ...state.applications] };
+    }
+    case "application_status": {
+      const applications = state.applications.map((a) =>
+        a.job.id === action.jobId
+          ? { ...a, status: action.status, updatedAt: action.now }
+          : a,
+      );
+      return { ...state, applications };
+    }
+    case "application_removed":
+      return {
+        ...state,
+        applications: state.applications.filter((a) => a.job.id !== action.jobId),
+      };
     case "chat_add":
       return { ...state, chat: [...state.chat, action.entry] };
     case "chat_busy":
@@ -218,9 +267,12 @@ async function boot(dispatch: Dispatch<Action>): Promise<void> {
     profile,
     anthropic,
     usajobs,
+    adzuna,
+    adzunaNudgeDismissed,
     hidden,
     ups,
     downs,
+    applications,
     chatRows,
     themeSetting,
   ] = await Promise.all([
@@ -229,9 +281,12 @@ async function boot(dispatch: Dispatch<Action>): Promise<void> {
     repo.getStoredProfile(db),
     hasAnthropicKey(),
     hasUsaJobsKey(),
+    hasAdzunaKeys(),
+    isAdzunaNudgeDismissed(db),
     repo.listFeedback(db, "hidden"),
     repo.listFeedback(db, "up"),
     repo.listFeedback(db, "down"),
+    repo.listApplications(db),
     repo.listRecentChatMessages(db, 50),
     repo.getSetting(db, "theme"),
   ]);
@@ -291,11 +346,13 @@ async function boot(dispatch: Dispatch<Action>): Promise<void> {
     needsWizard: wizardDone === null,
     resume,
     profile,
-    keys: { anthropic, usajobs },
+    keys: { anthropic, usajobs, adzuna },
     ranked,
     hasSearched,
+    adzunaNudgeDismissed,
     hidden,
     feedback,
+    applications,
     chat,
     theme: isThemePreference(themeSetting) ? themeSetting : "system",
   });

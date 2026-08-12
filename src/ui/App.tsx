@@ -23,6 +23,7 @@ import { PrintProvider } from "./documents/print.tsx";
 import { Wizard } from "./wizard/Wizard.tsx";
 import { ChatTab } from "./chat/ChatTab.tsx";
 import { OpportunitiesTab } from "./jobs/OpportunitiesTab.tsx";
+import { ApplicationsTab } from "./applications/ApplicationsTab.tsx";
 import { SettingsTab } from "./settings/SettingsTab.tsx";
 import { Mark } from "./components/Mark.tsx";
 import { Banner, Busy, IconButton, PrimaryButton, TabBar } from "./components/ui.tsx";
@@ -152,6 +153,7 @@ function Shell() {
       >
         {state.tab === "chat" && <ChatTab />}
         {state.tab === "jobs" && <OpportunitiesTab />}
+        {state.tab === "applications" && <ApplicationsTab />}
         {state.tab === "settings" && <SettingsTab />}
       </main>
     </div>
@@ -168,10 +170,15 @@ function BootRetryButton() {
 }
 
 /**
- * Two tabs, exactly as SPEC §0 says. Settings is the icon button beside them,
- * not a third tab — it is a place you visit, not a place you work.
+ * Three tabs. SPEC §0 says two, and this is a deliberate departure recorded in
+ * DECISIONS.md: what the veteran already sent is not the same list as what
+ * they might send next, and folding the two together muddies the one ranked
+ * list the Opportunities tab is built around.
+ *
+ * Settings stays the icon button beside them, not a tab — it is a place you
+ * visit, not a place you work.
  */
-type MainTab = Extract<Tab, "chat" | "jobs">;
+type MainTab = Extract<Tab, "chat" | "jobs" | "applications">;
 
 function MainTabs({ jobCount }: { jobCount: number | null }) {
   const state = useAppState();
@@ -185,6 +192,9 @@ function MainTabs({ jobCount }: { jobCount: number | null }) {
       tabs={[
         { id: "chat", label: "Chat", icon: "forum" },
         { id: "jobs", label: "Opportunities", icon: "work", count: jobCount },
+        // No count. How many jobs you applied to is not news you need
+        // announced in a badge every time you open the app.
+        { id: "applications", label: "My applications", icon: "check_circle" },
       ]}
     />
   );

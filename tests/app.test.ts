@@ -4,6 +4,11 @@ import { migrate } from "../src/core/db/migrations.ts";
 import * as repo from "../src/core/db/repo.ts";
 import { toDollarPlaceholders } from "../src/tauri/db.ts";
 import { isSearchDue } from "../src/core/app/schedule.ts";
+import {
+  dismissAdzunaNudge,
+  isAdzunaNudgeDismissed,
+  shouldOfferMoreJobs,
+} from "../src/core/app/nudge.ts";
 import { getMonthSpend, recordSpend, spendInWords } from "../src/core/app/spend.ts";
 import { chatTurn } from "../src/core/chat/agent.ts";
 import { CHAT_SYSTEM } from "../src/core/chat/prompts/chat.v1.ts";
@@ -62,6 +67,52 @@ describe("isSearchDue", () => {
   it("interval 0 means the schedule is off — even for a first run", () => {
     expect(isSearchDue(null, 0, NOW)).toBe(false);
     expect(isSearchDue(NOW - 100 * HOUR, 0, NOW)).toBe(false);
+  });
+});
+
+// -----------------------------------------------------------------------------
+// The Adzuna offer
+// -----------------------------------------------------------------------------
+
+describe("shouldOfferMoreJobs", () => {
+  const allClear = {
+    hasSearched: true,
+    searching: false,
+    adzunaConnected: false,
+    dismissed: false,
+  };
+
+  it("shows once a search has finished and Adzuna is not connected", () => {
+    expect(shouldOfferMoreJobs(allClear)).toBe(true);
+  });
+
+  it("waits until the first search has completed", () => {
+    expect(shouldOfferMoreJobs({ ...allClear, hasSearched: false })).toBe(false);
+  });
+
+  it("stays out of the way while a search is running", () => {
+    expect(shouldOfferMoreJobs({ ...allClear, searching: true })).toBe(false);
+  });
+
+  it("disappears once Adzuna is connected", () => {
+    expect(shouldOfferMoreJobs({ ...allClear, adzunaConnected: true })).toBe(false);
+  });
+
+  it("no thanks means never again, whatever else is true", () => {
+    expect(shouldOfferMoreJobs({ ...allClear, dismissed: true })).toBe(false);
+  });
+});
+
+describe("adzuna nudge dismissal", () => {
+  it("starts undismissed and stays dismissed once declined", async () => {
+    const db = new NodeDb(":memory:");
+    await migrate(db, NOW);
+
+    expect(await isAdzunaNudgeDismissed(db)).toBe(false);
+    await dismissAdzunaNudge(db);
+    expect(await isAdzunaNudgeDismissed(db)).toBe(true);
+
+    db.close();
   });
 });
 

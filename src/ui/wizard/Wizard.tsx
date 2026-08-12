@@ -6,6 +6,7 @@ import { parseResume } from "../../core/documents/parseResume.ts";
 import { profileFromResume } from "../../core/profile/fromResume.ts";
 import * as repo from "../../core/db/repo.ts";
 
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { extractResumeFile } from "../../tauri/extractText.ts";
 import {
   setSecret,
@@ -18,6 +19,7 @@ import { tauriClock } from "../../tauri/clock.ts";
 import {
   db,
   getLlm,
+  hasAdzunaKeys,
   runSearch,
   validateAnthropicKey,
   validateUsaJobsKey,
@@ -151,6 +153,9 @@ export function Wizard() {
                 keys: {
                   anthropic: haveAiKey || appKeys.anthropic,
                   usajobs: (await repo.getSetting(db, "usajobs_connected")) === "1",
+                  // The wizard never asks for Adzuna; read reality so this
+                  // dispatch does not clobber what boot() found.
+                  adzuna: await hasAdzunaKeys(),
                 },
               });
               setStep("search");
@@ -374,7 +379,15 @@ function AiKeyStep({
       </Notice>
       <ol className="cn-guide">
         <li>
-          Go to <strong>console.anthropic.com</strong> and make a free account.
+          Go to{" "}
+          <button
+            type="button"
+            className="cn-jobcard__vialink"
+            onClick={() => void openUrl("https://console.anthropic.com/")}
+          >
+            console.anthropic.com
+          </button>{" "}
+          and make a free account.
         </li>
         <li>Add about $5 under Billing. You only pay for what you use.</li>
         <li>Under "API keys", make a key and copy it.</li>
@@ -433,7 +446,14 @@ function UsaJobsStep({ onDone }: { onDone: () => void }) {
       </p>
       <ol className="cn-guide">
         <li>
-          Go to <strong>developer.usajobs.gov/apirequest</strong>
+          Go to{" "}
+          <button
+            type="button"
+            className="cn-jobcard__vialink"
+            onClick={() => void openUrl("https://developer.usajobs.gov/apirequest/")}
+          >
+            developer.usajobs.gov/apirequest
+          </button>
         </li>
         <li>Fill in your name and email. They email you a key.</li>
         <li>Paste the key and that same email below.</li>
