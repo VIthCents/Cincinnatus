@@ -2,10 +2,10 @@ import { invoke } from "@tauri-apps/api/core";
 import { save } from "@tauri-apps/plugin-dialog";
 
 /**
- * API keys, via the Rust `get_secret`/`set_secret` commands — a JSON file in
- * the app's config directory. Interim until the OS keychain in Phase 4; the
- * function signatures are the contract that will not change when it lands.
- * Keys are never written to SQLite (SPEC §4) and never logged.
+ * API keys, via the Rust `get_secret`/`set_secret` commands — the OS keychain
+ * (Windows Credential Manager, macOS Keychain Services). The old plaintext
+ * file is migrated away at startup; see migrate_secrets in src-tauri. Keys are
+ * never written to SQLite (SPEC §4) and never logged.
  */
 
 export const SECRET_ANTHROPIC_KEY = "anthropic_api_key";
