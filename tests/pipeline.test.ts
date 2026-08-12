@@ -4,7 +4,11 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { NodeDb } from "../src/node/db.ts";
-import { migrate, LATEST_SCHEMA_VERSION } from "../src/core/db/migrations.ts";
+import {
+  migrate,
+  LATEST_SCHEMA_VERSION,
+  MIGRATIONS,
+} from "../src/core/db/migrations.ts";
 import * as repo from "../src/core/db/repo.ts";
 import { runPipeline } from "../src/core/pipeline/run.ts";
 import { parseProfile } from "../src/core/profile/parse.ts";
@@ -77,10 +81,12 @@ describe("migrations", () => {
     expect(await migrate(db, NOW)).toBe(LATEST_SCHEMA_VERSION);
     expect(await migrate(db, NOW)).toBe(LATEST_SCHEMA_VERSION);
 
+    // One row per migration and no more: the second call must have recorded
+    // nothing, which is what "idempotent" has to mean here.
     const rows = await db.all<{ version: number }>(
-      "SELECT version FROM schema_migrations",
+      "SELECT version FROM schema_migrations ORDER BY version",
     );
-    expect(rows).toHaveLength(1);
+    expect(rows.map((r) => r.version)).toEqual(MIGRATIONS.map((m) => m.version));
     db.close();
   });
 
@@ -103,6 +109,7 @@ describe("migrations", () => {
       "settings",
       "embeddings",
       "source_state",
+      "applications",
     ]) {
       expect(names).toContain(table);
     }

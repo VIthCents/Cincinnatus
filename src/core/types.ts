@@ -142,6 +142,31 @@ export interface RankedJob {
 }
 
 // -----------------------------------------------------------------------------
+// Applications
+// -----------------------------------------------------------------------------
+
+/**
+ * Where one application stands.
+ *
+ * Every value here is something the veteran said out loud by pressing a
+ * button. Nothing is inferred from a click on Apply, or from a search result,
+ * or from anything else: the app cannot see into an employer's hiring system,
+ * so a status it guessed would be a fact it invented (constraint 4), about the
+ * one subject the person cares most about.
+ */
+export type ApplicationStatus =
+  "applied" | "heard_back" | "interview" | "offer" | "closed";
+
+export interface TrackedApplication {
+  readonly job: Job;
+  readonly status: ApplicationStatus;
+  /** Epoch ms the veteran confirmed they had applied. */
+  readonly appliedAt: number;
+  /** Epoch ms the status last moved. Equal to appliedAt until it does. */
+  readonly updatedAt: number;
+}
+
+// -----------------------------------------------------------------------------
 // Run reporting
 // -----------------------------------------------------------------------------
 

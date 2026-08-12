@@ -151,12 +151,33 @@ export const MIGRATIONS: readonly Migration[] = [
          PRIMARY KEY (ats, slug)
        )`,
 
-      // API keys never go here. They live in the OS keychain (Phase 4) or, for
-      // the harness, in environment variables.
+      // API keys never go here. They live in the OS keychain or, for the
+      // harness, in environment variables.
       `CREATE TABLE IF NOT EXISTS settings (
          key   TEXT PRIMARY KEY,
          value TEXT NOT NULL
        )`,
+    ],
+  },
+  {
+    version: 2,
+    statements: [
+      // The jobs the veteran has told us they applied to.
+      //
+      // Not folded into `feedback`, even though that table already has an
+      // 'applied' verdict: its primary key is (job_id, verdict), so it models
+      // a set of independent flags. A status that MOVES — applied, then an
+      // answer, then an interview — needs one row per job that can be updated.
+      // The 'applied' verdict is still written alongside, for the reason given
+      // in repo.saveApplication.
+      `CREATE TABLE IF NOT EXISTS applications (
+         job_id     TEXT PRIMARY KEY,
+         status     TEXT NOT NULL CHECK (status IN
+                      ('applied', 'heard_back', 'interview', 'offer', 'closed')),
+         applied_at INTEGER NOT NULL,
+         updated_at INTEGER NOT NULL
+       )`,
+      `CREATE INDEX IF NOT EXISTS idx_applications_applied ON applications (applied_at)`,
     ],
   },
 ];

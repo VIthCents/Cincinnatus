@@ -4,7 +4,14 @@ import {
   AGGREGATOR_SOURCES,
   AGGREGATOR_STALE_DAYS,
 } from "../config.ts";
-import type { Job, Profile, SourceId, WatchlistEntry } from "../types.ts";
+import type {
+  ApplicationStatus,
+  Job,
+  Profile,
+  SourceId,
+  TrackedApplication,
+  WatchlistEntry,
+} from "../types.ts";
 
 /**
  * Thin data access. Hand-written SQL, no ORM, no query builder (constraint 7).
@@ -479,6 +486,93 @@ export async function listFeedback(
   const rows = await db.all<{ job_id: string }>(
     "SELECT job_id FROM feedback WHERE verdict = ?",
     [verdict],
+  );
+  return new Set(rows.map((r) => r.job_id));
+}
+
+// -----------------------------------------------------------------------------
+// Applications
+// -----------------------------------------------------------------------------
+
+/**
+ * Record that the veteran applied to a job.
+ *
+ * Only ever called because the person answered "Yes, I applied" — clicking
+ * Apply opens a browser and proves nothing about what happened next.
+ *
+ * `DO NOTHING` rather than an upsert: someone who opens the same posting again
+ * a fortnight later must not have an application that reached `interview`
+ * dragged back to `applied`, and `applied_at` is the date they told us, not
+ * the date they last looked.
+ */
+export async function saveApplication(
+  db: Db,
+  jobId: string,
+  now: number,
+): Promise<void> {
+  await db.run(
+    `INSERT INTO applications (job_id, status, applied_at, updated_at)
+     VALUES (?, 'applied', ?, ?)
+     ON CONFLICT(job_id) DO NOTHING`,
+    [jobId, now, now],
+  );
+  // The matching feedback row is not bookkeeping for its own sake:
+  // purgeStaleAggregatorJobs spares any job that appears in `feedback`, so
+  // this is what stops a tracked Adzuna listing from being deleted out from
+  // under the tracker sixty days later, taking the person's record with it.
+  await saveFeedback(db, jobId, "applied", now);
+}
+
+export async function updateApplicationStatus(
+  db: Db,
+  jobId: string,
+  status: ApplicationStatus,
+  now: number,
+): Promise<void> {
+  await db.run("UPDATE applications SET status = ?, updated_at = ? WHERE job_id = ?", [
+    status,
+    now,
+    jobId,
+  ]);
+}
+
+/** Undo a mis-click, including the retention hold saveApplication took. */
+export async function deleteApplication(db: Db, jobId: string): Promise<void> {
+  await db.run("DELETE FROM applications WHERE job_id = ?", [jobId]);
+  await removeFeedback(db, jobId, "applied");
+}
+
+/**
+ * Every tracked application, newest first.
+ *
+ * An INNER JOIN, so an application whose job row is gone simply does not
+ * appear. That cannot happen through the retention path — the feedback row
+ * saveApplication writes holds the job — and showing a headless entry with no
+ * title, employer or link would be worse than showing nothing.
+ */
+export async function listApplications(db: Db): Promise<TrackedApplication[]> {
+  const rows = await db.all<
+    JobRow & { status: string; applied_at: number; updated_at: number }
+  >(
+    `SELECT j.*, a.status, a.applied_at, a.updated_at
+       FROM applications a JOIN jobs j ON j.id = a.job_id
+      ORDER BY a.applied_at DESC, j.id`,
+  );
+  return rows.map((row) => ({
+    job: rowToJob(row),
+    status: row.status as ApplicationStatus,
+    appliedAt: row.applied_at,
+    updatedAt: row.updated_at,
+  }));
+}
+
+/**
+ * Job ids that already have a prepared resume or cover letter saved, so the
+ * tracker can offer to reopen them without asking once per row.
+ */
+export async function listJobIdsWithDocuments(db: Db): Promise<ReadonlySet<string>> {
+  const rows = await db.all<{ job_id: string }>(
+    "SELECT DISTINCT job_id FROM documents WHERE job_id IS NOT NULL",
   );
   return new Set(rows.map((r) => r.job_id));
 }
