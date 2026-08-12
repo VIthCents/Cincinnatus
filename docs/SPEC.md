@@ -92,7 +92,7 @@ cincinnatus/
   src/
     core/
       types.ts               # Profile, Job, Score, RunReport, Document, ChatMessage
-      sources/               # greenhouse.ts lever.ts ashby.ts usajobs.ts adzuna.ts jsearch.ts + source.ts (iface, rate limit, backoff)
+      sources/               # greenhouse.ts lever.ts ashby.ts usajobs.ts adzuna.ts + source.ts (iface, rate limit, backoff)
       pipeline/              # queries.ts normalize.ts dedupe.ts rank.ts score.ts run.ts
       documents/
         analyze.ts           # base-resume critique: strengths, gaps, fixes — honest, specific, kind
@@ -160,14 +160,13 @@ employers with public Greenhouse/Lever/Ashby boards, so ATS sources produce resu
 setup. **No auto-discovery of boards — discovery = crawling = constraint #1.** Verify endpoints against
 current official docs; record corrections in DECISIONS.md.
 
-| Source             | Auth                                    | Endpoint hint                                                         | Notes                                                                                |
-| ------------------ | --------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| USAJobs            | Free key + User-Agent email             | `https://data.usajobs.gov/api/search`                                 | Veterans hiring-path filter is first-class. Key signup is guided in the wizard (§8). |
-| Adzuna             | Free app_id + app_key                   | `https://api.adzuna.com/v1/api/jobs/us/search/{page}`                 | Broad aggregator; optional, wizard-guided.                                           |
-| JSearch (RapidAPI) | Freemium key — OPTIONAL, off by default | via RapidAPI                                                          | Google-for-Jobs index; feature-flagged, buried in advanced settings.                 |
-| Greenhouse         | None                                    | `https://boards-api.greenhouse.io/v1/boards/{slug}/jobs?content=true` | Watchlist-driven.                                                                    |
-| Lever              | None                                    | `https://api.lever.co/v0/postings/{slug}?mode=json`                   | Watchlist-driven.                                                                    |
-| Ashby              | None                                    | `https://api.ashbyhq.com/posting-api/job-board/{slug}`                | Watchlist-driven.                                                                    |
+| Source     | Auth                        | Endpoint hint                                                         | Notes                                                                                |
+| ---------- | --------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| USAJobs    | Free key + User-Agent email | `https://data.usajobs.gov/api/search`                                 | Veterans hiring-path filter is first-class. Key signup is guided in the wizard (§8). |
+| Adzuna     | Free app_id + app_key       | `https://api.adzuna.com/v1/api/jobs/us/search/{page}`                 | Broad aggregator; optional, guided in Settings.                                      |
+| Greenhouse | None                        | `https://boards-api.greenhouse.io/v1/boards/{slug}/jobs?content=true` | Watchlist-driven.                                                                    |
+| Lever      | None                        | `https://api.lever.co/v0/postings/{slug}?mode=json`                   | Watchlist-driven.                                                                    |
+| Ashby      | None                        | `https://api.ashbyhq.com/posting-api/job-board/{slug}`                | Watchlist-driven.                                                                    |
 
 **Crosswalk:** `scripts/build-crosswalk.ts` transforms O*NET's downloadable military crosswalk (MOC → SOC
 → civilian titles, onetcenter.org) into vendored `crosswalk.json`. If the download can't be fetched in
@@ -222,10 +221,10 @@ posted-age, plain-language match badge ("Strong match"), one-line why. Buttons: 
 confirmations → Save/Print) · **Apply** (opens browser) · 👍/👎/Hide. Filters minimal: Remote only ·
 Federal only · Hide low matches.
 
-**Settings (gear icon, one simple page):** AI key paste box (validate + green check), USAJobs key, search
-schedule, auto-prep count, plain-language AI spend estimate, and — under an "Advanced" fold — watchlist
-editing and optional sources. When credits run out mid-generation, the app says so kindly in plain words
-with an "add more credits" link — never a raw error.
+**Settings (gear icon, one simple page):** AI key paste box (validate + green check), USAJobs key, optional
+sources (each with a plain-words signup guide), search schedule, auto-prep count, plain-language AI spend
+estimate, and — under an "Advanced" fold — watchlist editing. When credits run out mid-generation, the app
+says so kindly in plain words with an "add more credits" link — never a raw error.
 
 Tray: Search now / Open / Quit; close hides to tray; scheduler keeps running; daily notification:
 "Cincinnatus found 5 new jobs that fit you."
@@ -257,7 +256,7 @@ fixtures/resume1.pdf`, `harness tailor --job <fixture>`); prompt files in-repo, 
 **Phase 3 — UI + shell.** Wizard, Chat tab, Opportunities tab on core; tray, 6-hour scheduler,
 notifications, print-to-PDF; reading-level pass on every string.
 
-**Phase 4 — Breadth + distribution.** Adzuna, Lever, Ashby, JSearch flag; crosswalk build; keychain;
+**Phase 4 — Breadth + distribution.** Adzuna, Lever, Ashby; crosswalk build; keychain;
 feedback-adjusted ranking; README for two audiences (veterans installing / devs contributing); packaging
 
 - updater. **Signed installers (Azure Trusted Signing + Apple notarization) are REQUIRED before public

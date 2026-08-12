@@ -7,7 +7,8 @@ information, because there is no server at all.
 
 ## What we never do
 
-- We never track you.
+- We never track you. (If you turn on more job listings, the company behind them counts one
+  thing — see number 4 below.)
 - We never collect analytics.
 - We never send crash reports.
 - We never send your resume anywhere unless you turn on AI help. See below.
@@ -23,9 +24,12 @@ Everything is in one file on your own computer:
 Your resume, your chat history, and any documents the app makes for you all live in that file.
 Nobody else can read it. To delete everything, delete that file.
 
+Your access keys are the one thing kept somewhere else. Windows and Mac each have a locked
+place for passwords, and that is where they go. You can remove them in Settings at any time.
+
 ## What leaves your computer, and when
 
-Three things can leave. Each one is listed here.
+Four things can leave. Each one is listed here.
 
 ### 1. Job searches
 
@@ -52,6 +56,19 @@ USAJobs is the government's job website. To use it, they require the app to send
 address you signed up with** on each request. That is their rule, not ours.
 
 **This only happens if you add a USAJobs key.** If you skip it, the app never contacts USAJobs.
+
+### 4. More job listings — only if you turn it on
+
+Adzuna is a website that gathers job ads from around the web. If you turn on more job listings
+in Settings, the app sends Adzuna the same kind of **search words** — things like "truck driver"
+and the name of your city. It does **not** send your name or your resume.
+
+**This only happens if you add Adzuna's two numbers in Settings.** If you skip it, the app never
+contacts Adzuna. You can remove the numbers at any time in Settings.
+
+One more thing worth knowing: tapping Apply on one of these jobs opens the ad on Adzuna's
+website first, and Adzuna counts that visit. That is how they pay for letting apps show their
+jobs.
 
 ## Why we are careful about this
 

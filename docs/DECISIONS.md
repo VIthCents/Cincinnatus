@@ -1195,3 +1195,112 @@ difference). The developer half is deliberately not held to that bar.
 
 **Consequence.** The status line now says plainly that there is no installer yet, which is the honest
 answer until the first signed release is built and someone has installed it on a clean machine.
+
+---
+
+## 2026-08-11 — Public distribution: every person brings their own keys
+
+**Context.** The app is meant for public download, and its audience is very non-technical, so the
+question was asked directly: can it work with no API keys at all, or can key creation be automated for
+people? Job search already works with zero keys — all 33 starter boards are keyless — so this is only
+about the three optional extras: Adzuna, USAJobs, and the Anthropic key.
+
+**Decision.** Per-user keys, obtained through guided in-app signup flows. Three alternatives were
+considered and rejected. _A shared studio key embedded in the app_: any key inside a shipped binary is
+extractable and therefore public, Adzuna's 250-requests-a-day ceiling is per key and one active person
+uses ~80, so a shared key fails everyone at once at roughly three users, and per-application provider
+terms forbid it anyway. _A proxy or Admin-API key-provisioning service_: requires running a server, and
+PRIVACY.md's central promise is that there is no server at all — plus perpetual cost and an account
+system for people the app promises never sign up. _Automating the third-party signups_: against those
+services' terms.
+
+**Consequence.** The work goes into making keyless mode maximal and the guided flows gentle: every
+signup URL in the wizard and Settings is a real button that opens the browser rather than bold text to
+retype, and the packaged app must actually be able to reach every keyed host (next entry).
+
+---
+
+## 2026-08-11 — The capability file and the core allowlist are tested twins
+
+**Context.** `src-tauri/capabilities/default.json` never gained `api.adzuna.com` when the Adzuna source
+shipped, while `src/core/net/allowlist.ts` had it. The 2026-08-09 networking entry called this "a
+deliberate two-place change, each a one-line diff, each reviewed" — and one of the two diffs was
+skipped, partly because CONTRIBUTING's new-source checklist named only the TS half. In the packaged app
+every Adzuna request died at the Rust scope, and the validator's catch reported it as "Could not reach
+Adzuna. Check your internet connection." — a permissions bug wearing a network costume, with advice the
+person can never act their way out of.
+
+**Decision.** The missing line is added, CONTRIBUTING's checklist now names both halves, and a vitest in
+`tests/allowlist.test.ts` asserts every `ALLOWED_HOSTS` host has an `https://host/**` grant in the
+capability file. The test is one-directional on purpose: `api.anthropic.com` legitimately lives only in
+the capability, because the LLM path never goes through core's http port.
+
+**Consequence.** Forgetting the second half of the two-place change is now a red test naming the exact
+line to add, not a shipped bug that presents as the user's wifi.
+
+---
+
+## 2026-08-11 — The Adzuna offer: one card, dismissible, never in the wizard
+
+**Context.** Adzuna is the source that reaches the trades, and it was findable only by someone who
+opens Settings and reads. SPEC §6 said "wizard-guided", but the wizard already sends people to one
+developer website for the AI key, and a second signup before they have seen a single job is where
+people give up. The ruling: no wizard step; the app offers once, at the right moment.
+
+**Decision.** After the first completed search, the Jobs tab shows one card: "Want driving, warehouse
+and trades jobs too?" — with "Show me how" jumping to the Settings guide (scroll and focus, so a screen
+reader announces the landing) and "No thanks" as a permanent dismissal stored as an ordinary setting.
+The visibility rule is a pure function (`core/app/nudge.ts`) with a truth-table test. It deliberately
+still shows when a search found nothing: the person with zero matches is exactly who it is for. SPEC §6
+now says "guided in Settings". Alongside it, the Settings section stops lying on a spent day — when the
+call ledger says the daily or monthly ceiling is hit, the green "More job listings are on." banner is
+replaced by the same plain words the harness prints — and gains a "Remove these numbers" button so the
+PRIVACY promise that any key can be removed in Settings is true for Adzuna too.
+
+**Consequence.** One offer, once, at a moment when it is visibly useful; declining it is respected
+forever. No nagging, and nothing about the offer appears in the SPEC's screen inventory — like every
+other banner, it lives here.
+
+---
+
+## 2026-08-11 — A third tab: the jobs you applied to
+
+**Context.** The app finds a job, ranks it, writes the resume and the letter — and then the story
+stopped dead. `Apply` opened a browser and nothing else happened: no record, no mark on the card, and
+nothing at all the next morning. A veteran who applies to twenty jobs over three weeks had no way to
+see which twenty. For an audience with low tech literacy, "what did I send, and where did it get to?"
+is exactly the question a spreadsheet was supposed to answer and never does.
+
+Two things had to be settled first. SPEC §0/§8 fixes the UI at **two tabs**, and the tracker is in no
+phase of SPEC §9. The user ruled on both on 2026-08-11, and also ruled **out** the obvious companions:
+no follow-up reminders and no AI-written follow-up notes — following up is not part of the modern
+digital application process, and an app that nags a person about it is inventing a chore.
+
+**Decision.** A third tab, "My applications", on a new `applications` table (migration v2). Three
+properties define it:
+
+- **Nothing is inferred.** A row exists only because the person answered "Yes, I applied" to a question
+  the card asks after the posting opens. Clicking Apply proves a browser opened and nothing more;
+  a status Cincinnatus guessed would be a fabricated fact (constraint 4) about the subject the person
+  cares most about. "Not yet" leaves no trace, and the unanswered question is gone at the next launch
+  rather than waiting to be asked again.
+- **It records; it does not chase.** No reminders, no notifications, no AI calls anywhere in the
+  feature — the whole tab works with zero keys connected. Reopening the resume and letter reads them
+  back from `documents`, so looking at what you already made never costs a cent of the veteran's own
+  credits.
+- **An applied job stays in the Opportunities list**, with a "You applied" fact on the card. Hiding it
+  would be a job vanishing because they pressed a button — the kind of disappearance this audience
+  cannot debug or undo.
+
+Not folded into the existing `feedback` table, despite its unused `applied` verdict: its primary key is
+`(job_id, verdict)`, so it models independent flags, not one status that moves. The `applied` verdict is
+still written alongside, and that is not bookkeeping — `purgeStaleAggregatorJobs` spares any job in
+`feedback`, so it is what stops a tracked Adzuna listing being deleted out from under the tracker at
+ninety days, taking the person's own record with it.
+
+**Consequence.** `LATEST_SCHEMA_VERSION` is 2, so the migration runner earns its keep for the first
+time; `tests/pipeline.test.ts` no longer asserts that exactly one migration exists. The five statuses
+(`applied`, `heard_back`, `interview`, `offer`, `closed`) are a CHECK constraint, so adding a sixth is a
+migration and a deliberate act. Their words are the UI's, not the schema's: the last one reads "Not this
+one", because "rejected" is a word that lands hard on someone who has had a run of them, and the app has
+no business being the one to say it.
