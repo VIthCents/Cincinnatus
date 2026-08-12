@@ -91,6 +91,10 @@ A new source must:
 
 - Be added to `src/core/net/allowlist.ts`. The HTTP adapter throws on any host not listed there, so this
   is enforced at runtime rather than by convention.
+- Be added to the `http:default` scope in `src-tauri/capabilities/default.json` as well. That file is the
+  OS-level twin of the allowlist: without its line the packaged app refuses the host even though dev,
+  tests, and the harness all work — a two-place change on purpose, and `tests/allowlist.test.ts` fails if
+  the second half is forgotten.
 - Implement `Source` from `src/core/sources/source.ts`. **`fetch()` must never throw.** One dead board
   must not empty the user's ranked list — return the error in the result instead.
 - Ship recorded fixtures, including the error responses. Tests never hit the network.

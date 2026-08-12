@@ -18,6 +18,7 @@
         { "url": "https://data.usajobs.gov/**" },
         { "url": "https://api.lever.co/**" },
         { "url": "https://api.ashbyhq.com/**" },
+        { "url": "https://api.adzuna.com/**" },
         { "url": "https://api.anthropic.com/**" }
       ]
     }
