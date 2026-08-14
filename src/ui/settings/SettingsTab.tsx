@@ -447,7 +447,7 @@ function AdzunaSection({
           </li>
           <li>
             If it asks for a website and you do not have one, put{" "}
-            <strong>https://github.com/cincinnatus/cincinnatus</strong>.
+            <strong>https://github.com/VIthCents/Cincinnatus</strong>.
           </li>
           <li>Check your email and click the link they send you.</li>
           <li>

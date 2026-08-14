@@ -32,7 +32,10 @@ const SCHEDULER_TICK_SECS: u64 = 30 * 60;
 // unrecoverable one (forget the passphrase and the vault is gone). See
 // docs/DECISIONS.md.
 
-const KEYCHAIN_SERVICE: &str = "io.github.cincinnatus";
+// TODO(identity): this must stay equal to `identifier` in tauri.conf.json.
+// They are two independent strings that name the same thing, and changing
+// either one alone orphans every key a user has stored.
+const KEYCHAIN_SERVICE: &str = "io.github.vithcents.cincinnatus";
 
 fn secrets_path(app: &AppHandle) -> Result<PathBuf, String> {
     let dir = app

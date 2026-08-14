@@ -18,8 +18,8 @@ information, because there is no server at all.
 
 Everything is in one file on your own computer:
 
-- **Windows:** `%APPDATA%\io.github.cincinnatus\cincinnatus.db`
-- **Mac:** `~/Library/Application Support/io.github.cincinnatus/cincinnatus.db`
+- **Windows:** `%APPDATA%\io.github.vithcents.cincinnatus\cincinnatus.db`
+- **Mac:** `~/Library/Application Support/io.github.vithcents.cincinnatus/cincinnatus.db`
 
 Your resume, your chat history, and any documents the app makes for you all live in that file.
 Nobody else can read it. To delete everything, delete that file.

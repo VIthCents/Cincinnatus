@@ -131,8 +131,7 @@ export const REQUEST_TIMEOUT_MS = 30_000;
  * at Greenhouse or OPM wants to know who is calling, it has to lead somewhere.
  */
 // TODO(identity): update if the repository moves.
-export const USER_AGENT =
-  "Cincinnatus/0.1 (+https://github.com/cincinnatus/cincinnatus)";
+export const USER_AGENT = "Cincinnatus/0.1 (+https://github.com/VIthCents/Cincinnatus)";
 
 /**
  * Titles below this token-overlap score with the profile are dropped before

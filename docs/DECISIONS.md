@@ -1304,3 +1304,48 @@ time; `tests/pipeline.test.ts` no longer asserts that exactly one migration exis
 migration and a deliberate act. Their words are the UI's, not the schema's: the last one reads "Not this
 one", because "rejected" is a word that lands hard on someone who has had a run of them, and the app has
 no business being the one to say it.
+
+---
+
+## 2026-08-14 — The app belongs to VIthCents/Cincinnatus (supersedes 2026-08-08)
+
+**Context.** The 2026-08-08 entry froze the identity as `io.github.cincinnatus`, with the User-Agent
+`Cincinnatus/0.1 (+https://github.com/cincinnatus/cincinnatus)`. Neither the GitHub organisation
+`cincinnatus` nor that repository exists. This was not a cosmetic error: the User-Agent is sent on
+every outbound request to Greenhouse, Lever, Ashby, OPM and Adzuna, and its own comment says the URL
+"is a real contact point — if someone at Greenhouse or OPM wants to know who is calling, it has to
+lead somewhere". It led to a 404. The same dead URL was also printed in the Settings tab as advice:
+the Adzuna signup form asks for a website, and the app told the veteran to enter that address.
+
+The freeze was written to protect released users. There are none. This is the last moment the string
+can change for free.
+
+**Decision.** The repository is `https://github.com/VIthCents/Cincinnatus`. The bundle identifier
+becomes `io.github.vithcents.cincinnatus`, matching the org that actually owns the code. Copyright
+holder stays "Cincinnatus contributors" — that part of the 2026-08-08 entry is not superseded.
+
+Five sites, all of which must move together, and the grep that proves it:
+`git grep -i "io.github.cincinnatus\|github.com/cincinnatus"` must return only this file's history.
+
+- `src-tauri/tauri.conf.json` — `identifier`
+- `src-tauri/src/lib.rs` — `KEYCHAIN_SERVICE`, a second independent string naming the same thing
+- `src/core/config.ts` — `USER_AGENT`
+- `src/ui/settings/SettingsTab.tsx` — the Adzuna signup advice
+- `PRIVACY.md` — the two documented database paths
+
+**Consequence.** Developer machines lose their stored keys once, and must re-enter them in Settings.
+That is the whole cost, and it is paid now rather than by strangers later. No keychain-to-keychain
+migration is built: writing migration code for zero users is how a one-line change becomes a
+permanent maintenance surface. The old credentials linger orphaned under `io.github.cincinnatus` in
+Credential Manager and macOS Keychain, harmlessly, as does `%APPDATA%\io.github.cincinnatus`.
+
+`migrate_secrets` needs no change and cannot misfire: its path comes from `app_config_dir`, which is
+derived from the identifier, so under the new id it looks in a new empty directory and no-ops.
+
+Frozen from the first release onward, and this time the string names something real. The macOS
+_signing_ identity is a separate thing and is unaffected — that one must also never change across
+releases, for the different reason given in RELEASING.md.
+
+`bundle.licenseFile` is deliberately not set. On NSIS it inserts a license page the person must
+click through, and MIT requires no such acceptance; one more screen between this audience and a
+working app is a real cost for no legal benefit.
