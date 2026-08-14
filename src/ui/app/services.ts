@@ -293,7 +293,7 @@ export async function validateUsaJobsKey(
     }
     return {
       ok: false,
-      message: `USAJobs answered in an unexpected way (code ${response.status}). Try again in a minute.`,
+      message: "USAJobs had a problem on their end. Wait a minute and try again.",
     };
   } catch {
     return {
@@ -335,7 +335,7 @@ export async function validateAdzunaKeys(
     }
     return {
       ok: false,
-      message: `Adzuna answered in an unexpected way (code ${response.status}). Try again in a bit.`,
+      message: "Adzuna had a problem on their end. Wait a minute and try again.",
     };
   } catch {
     return {

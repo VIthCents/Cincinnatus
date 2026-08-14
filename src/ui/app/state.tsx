@@ -20,6 +20,7 @@ import type { ResumeData } from "../../core/documents/types.ts";
 import { verifyResume } from "../../core/documents/verify.ts";
 import * as repo from "../../core/db/repo.ts";
 import { isAdzunaNudgeDismissed } from "../../core/app/nudge.ts";
+import { plainErrorWords } from "./errorWords.ts";
 import {
   db,
   ensureDbReady,
@@ -96,6 +97,11 @@ export interface AppState {
   readonly hasSearched: boolean;
   /** True once the person has said "no thanks" to the Adzuna offer. Permanent. */
   readonly adzunaNudgeDismissed: boolean;
+  /**
+   * True when the OS key store could not be read at startup. Not persisted:
+   * the next launch simply asks again, and usually gets an answer.
+   */
+  readonly keyStoreTrouble: boolean;
   readonly hidden: ReadonlySet<string>;
   /** The veteran's saved 👍/👎 per job, restored across launches. */
   readonly feedback: ReadonlyMap<string, "up" | "down">;
@@ -121,6 +127,7 @@ const initialState: AppState = {
   searchStatus: "",
   hasSearched: false,
   adzunaNudgeDismissed: false,
+  keyStoreTrouble: false,
   hidden: new Set(),
   feedback: new Map(),
   applications: [],
@@ -140,6 +147,7 @@ export type Action =
       lastReport: WidenSummary | null;
       hasSearched: boolean;
       adzunaNudgeDismissed: boolean;
+      keyStoreTrouble: boolean;
       hidden: ReadonlySet<string>;
       feedback: ReadonlyMap<string, "up" | "down">;
       applications: readonly TrackedApplication[];
@@ -153,6 +161,7 @@ export type Action =
   | { type: "profile"; profile: Profile }
   | { type: "keys"; keys: { anthropic: boolean; usajobs: boolean; adzuna: boolean } }
   | { type: "adzuna_nudge_dismissed" }
+  | { type: "key_trouble_dismissed" }
   | { type: "search_start" }
   | { type: "search_progress"; progress: SearchProgress }
   | { type: "feedback"; jobId: string; verdict: "up" | "down" | null }
@@ -191,6 +200,7 @@ function reducer(state: AppState, action: Action): AppState {
         lastReport: action.lastReport,
         hasSearched: action.hasSearched,
         adzunaNudgeDismissed: action.adzunaNudgeDismissed,
+        keyStoreTrouble: action.keyStoreTrouble,
         hidden: action.hidden,
         feedback: action.feedback,
         applications: action.applications,
@@ -211,6 +221,8 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, keys: action.keys };
     case "adzuna_nudge_dismissed":
       return { ...state, adzunaNudgeDismissed: true };
+    case "key_trouble_dismissed":
+      return { ...state, keyStoreTrouble: false };
     case "search_start":
       return {
         ...state,
@@ -283,8 +295,22 @@ export function useAppDispatch(): Dispatch<Action> {
   return useContext(DispatchContext);
 }
 
+/**
+ * True when a key is present, false when it is not — and false, with a note
+ * for the person, when the key store could not be asked at all.
+ */
+let keyStoreTrouble = false;
+function keyProbe(pending: Promise<boolean>): Promise<boolean> {
+  return pending.catch((err: unknown) => {
+    console.error(err);
+    keyStoreTrouble = true;
+    return false;
+  });
+}
+
 /** Everything the app needs before first paint, in one pass. */
 async function boot(dispatch: Dispatch<Action>): Promise<void> {
+  keyStoreTrouble = false;
   await ensureDbReady();
 
   const [
@@ -305,9 +331,18 @@ async function boot(dispatch: Dispatch<Action>): Promise<void> {
     repo.getSetting(db, "wizard_done"),
     repo.getLatestDocument(db, "base_resume"),
     repo.getStoredProfile(db),
-    hasAnthropicKey(),
-    hasUsaJobsKey(),
-    hasAdzunaKeys(),
+    // The three key probes are allowed to fail without taking the app down
+    // with them. They read the OS keychain, which can be locked or briefly
+    // unavailable for reasons that have nothing to do with the person's data —
+    // and the boot catch renders "Cincinnatus could not open its saved data",
+    // which would be both a dead end and untrue: the database is fine, the job
+    // search works, and only the AI and federal features are affected.
+    //
+    // Every database read in this list stays unguarded on purpose. Those really
+    // are the saved data, and failing to open it really should stop the app.
+    keyProbe(hasAnthropicKey()),
+    keyProbe(hasUsaJobsKey()),
+    keyProbe(hasAdzunaKeys()),
     isAdzunaNudgeDismissed(db),
     repo.listFeedback(db, "hidden"),
     repo.listFeedback(db, "up"),
@@ -387,6 +422,7 @@ async function boot(dispatch: Dispatch<Action>): Promise<void> {
     lastReport,
     hasSearched,
     adzunaNudgeDismissed,
+    keyStoreTrouble,
     hidden,
     feedback,
     applications,
@@ -403,11 +439,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     boot(dispatch).catch((err: unknown) => {
       // Never strand the person on the spinner. Say what happened in plain
       // words and give them a button.
+      console.error(err);
       dispatch({
         type: "boot_failed",
-        message:
-          "Cincinnatus could not open its saved data. " +
-          (err instanceof Error ? err.message : String(err)),
+        message: `Cincinnatus could not open its saved data. ${plainErrorWords(err)}`,
       });
     });
   }, [bootAttempt]);

@@ -26,7 +26,14 @@ import { OpportunitiesTab } from "./jobs/OpportunitiesTab.tsx";
 import { ApplicationsTab } from "./applications/ApplicationsTab.tsx";
 import { SettingsTab } from "./settings/SettingsTab.tsx";
 import { Mark } from "./components/Mark.tsx";
-import { Banner, Busy, IconButton, PrimaryButton, TabBar } from "./components/ui.tsx";
+import {
+  Banner,
+  Busy,
+  IconButton,
+  PrimaryButton,
+  QuietButton,
+  TabBar,
+} from "./components/ui.tsx";
 
 export default function App() {
   return (
@@ -151,6 +158,25 @@ function Shell() {
         aria-labelledby={state.tab === "settings" ? undefined : `tab-${state.tab}`}
         tabIndex={-1}
       >
+        {/* The key store was unreadable at startup. The database opened fine
+            and the job search works, so this is a notice and not a dead end. */}
+        {state.keyStoreTrouble && (
+          <Banner
+            tone="caution"
+            title="Cincinnatus could not check your saved keys."
+            actions={
+              <QuietButton
+                size="md"
+                onClick={() => dispatch({ type: "key_trouble_dismissed" })}
+              >
+                OK
+              </QuietButton>
+            }
+          >
+            The job search still works. AI help and federal jobs are off for now. Close
+            Cincinnatus and open it again to try once more.
+          </Banner>
+        )}
         {state.tab === "chat" && <ChatTab />}
         {state.tab === "jobs" && <OpportunitiesTab />}
         {state.tab === "applications" && <ApplicationsTab />}

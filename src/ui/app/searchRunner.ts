@@ -3,6 +3,7 @@ import { SearchProgressTracker } from "../../core/app/progress.ts";
 import * as repo from "../../core/db/repo.ts";
 import type { ProgressEvent } from "../../core/ports.ts";
 import { db, runSearch } from "./services.ts";
+import { plainErrorWords } from "./errorWords.ts";
 import type { Action } from "./state.tsx";
 
 /**
@@ -48,9 +49,10 @@ export async function runSearchNow(
     });
     options.notify?.(runReport.jobsNew);
   } catch (err) {
+    console.error(err);
     dispatch({
       type: "search_failed",
-      message: `The search hit a problem: ${err instanceof Error ? err.message : String(err)}. Try again in a bit.`,
+      message: `The search hit a problem. ${plainErrorWords(err)} Try again in a bit.`,
     });
   } finally {
     searchInFlight = false;
