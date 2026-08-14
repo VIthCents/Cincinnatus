@@ -121,7 +121,15 @@ function ApplicationCard({
   function setStatus(next: ApplicationStatus) {
     const at = tauriClock.now();
     dispatch({ type: "application_status", jobId: job.id, status: next, now: at });
-    void repo.updateApplicationStatus(db, job.id, next, at);
+    // Dispatch first so the tap feels instant, but if the row turned out not to
+    // be there, take it off the screen rather than leaving a card that answers
+    // to nothing.
+    void repo.updateApplicationStatus(db, job.id, next, at).then(
+      (moved) => {
+        if (!moved) dispatch({ type: "application_removed", jobId: job.id });
+      },
+      () => dispatch({ type: "application_removed", jobId: job.id }),
+    );
   }
 
   function remove() {

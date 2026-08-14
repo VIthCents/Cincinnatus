@@ -88,6 +88,42 @@ describe("the applications migration", () => {
     expect(await migrate(db, NOW)).toBe(LATEST_SCHEMA_VERSION);
     db.close();
   });
+
+  /**
+   * Forward-only means an older build meeting a newer database has to say so.
+   * Carrying on would skip every migration, leave the newer tables in place,
+   * and then fail somewhere deeper on a column it does not know about — with
+   * an error about SQL rather than about versions.
+   */
+  it("refuses a database from a newer version of the app, in plain words", async () => {
+    const db = new NodeDb(":memory:");
+    await migrate(db, NOW);
+    await db.run("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)", [
+      LATEST_SCHEMA_VERSION + 97,
+      NOW,
+    ]);
+
+    await expect(migrate(db, NOW)).rejects.toThrow(/newer version of Cincinnatus/);
+    db.close();
+  });
+
+  /**
+   * A database that cannot be read is not a fresh database. Treating every
+   * failure as "fresh" re-runs every migration over it, which was survivable
+   * only because every v1 statement is IF NOT EXISTS — and stops being
+   * survivable the first time a migration is an ALTER TABLE.
+   */
+  it("propagates a broken database rather than reporting version zero", async () => {
+    const broken = {
+      all: () => Promise.reject(new Error("database disk image is malformed")),
+      run: () => Promise.resolve(),
+      close: () => {},
+    };
+
+    await expect(
+      migrate(broken as unknown as Parameters<typeof migrate>[0], NOW),
+    ).rejects.toThrow(/malformed/);
+  });
 });
 
 // -----------------------------------------------------------------------------
@@ -155,6 +191,45 @@ describe("updateApplicationStatus", () => {
     expect(tracked!.status).toBe("offer");
     expect(tracked!.appliedAt).toBe(NOW);
     expect(tracked!.updatedAt).toBe(NOW + 3 * DAY);
+
+    db.close();
+  });
+
+  /**
+   * The tab dispatches optimistically and then calls this, so it has to be able
+   * to tell "moved" from "there was nothing to move". Without the answer, a tap
+   * on a row the database no longer holds looks exactly like success and the
+   * card sits there answering to nothing.
+   */
+  it("says whether there was anything to move", async () => {
+    const job = makeJob("j1", "Dispatcher");
+    const db = await dbWithJobs([job]);
+
+    await repo.saveApplication(db, job.id, NOW);
+    expect(await repo.updateApplicationStatus(db, job.id, "interview", NOW)).toBe(true);
+    expect(
+      await repo.updateApplicationStatus(db, "no-such-job", "interview", NOW),
+    ).toBe(false);
+
+    db.close();
+  });
+});
+
+describe("saveApplication's answer", () => {
+  it("distinguishes a new record from one already tracked", async () => {
+    const job = makeJob("j1", "Dispatcher");
+    const db = await dbWithJobs([job]);
+
+    expect(await repo.saveApplication(db, job.id, NOW)).toBe(true);
+
+    // Confirming again a fortnight later must not imply a second application
+    // was recorded, and must not drag a moved status back to 'applied'.
+    await repo.updateApplicationStatus(db, job.id, "interview", NOW + DAY);
+    expect(await repo.saveApplication(db, job.id, NOW + 14 * DAY)).toBe(false);
+
+    const [tracked] = await repo.listApplications(db);
+    expect(tracked!.status).toBe("interview");
+    expect(tracked!.appliedAt).toBe(NOW);
 
     db.close();
   });
@@ -254,6 +329,33 @@ describe("purgeStaleAggregatorJobs", () => {
     // The untracked one goes, as retention intends. The one the person
     // applied to must not — deleting it would erase their own record.
     expect(await repo.getJobById(db, untouched.id)).toBeNull();
+    expect(await repo.getJobById(db, tracked.id)).not.toBeNull();
+    expect((await repo.listApplications(db)).length).toBe(1);
+
+    db.close();
+  });
+
+  /**
+   * The feedback row saveApplication writes is what spared the job above, and
+   * that coupling is invisible from the purge query. This removes it directly —
+   * standing in for any future path that clears feedback without going through
+   * deleteApplication — and the application must still survive on its own.
+   * listApplications is an INNER JOIN, so losing the job here would not leave a
+   * broken row on screen; it would silently erase the person's record of having
+   * applied at all.
+   */
+  it("spares a tracked job even with its feedback row gone", async () => {
+    const long = NOW - (AGGREGATOR_DELETE_DAYS + 30) * DAY;
+    const tracked: Job = {
+      ...makeJob("j1", "Delivery Driver", "adzuna"),
+      lastSeenAt: long,
+    };
+    const db = await dbWithJobs([tracked]);
+
+    await repo.saveApplication(db, tracked.id, NOW);
+    await repo.removeFeedback(db, tracked.id, "applied");
+    await repo.purgeStaleAggregatorJobs(db, NOW);
+
     expect(await repo.getJobById(db, tracked.id)).not.toBeNull();
     expect((await repo.listApplications(db)).length).toBe(1);
 

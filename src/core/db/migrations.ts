@@ -187,16 +187,39 @@ export const LATEST_SCHEMA_VERSION = MIGRATIONS.reduce(
   0,
 );
 
+/**
+ * The version the database is at, or 0 for a fresh one.
+ *
+ * Two things here are deliberate and were both wrong before.
+ *
+ * The fresh-database case is detected by asking `sqlite_master` whether the
+ * table exists, not by running the read inside a `try` and treating any failure
+ * as "fresh". A blanket catch cannot tell a new database from a broken one, and
+ * answering 0 for a broken one means re-running every migration over it.
+ *
+ * The read itself selects a declared column and orders, rather than
+ * `SELECT MAX(version)`. This is the same hazard the docblock at the top of
+ * this file describes for PRAGMA: an aggregate is an expression column with no
+ * declared type, and @tauri-apps/plugin-sql decodes by declared type, so
+ * `MAX(version)` can decode badly inside the app while working perfectly in the
+ * harness and in tests. Reading a column typed `INTEGER PRIMARY KEY` cannot.
+ *
+ * That combination used to be survivable only by luck: every v1 statement is
+ * `IF NOT EXISTS`, so a spurious 0 re-ran them harmlessly. It stops being
+ * survivable the moment a migration is not idempotent on its own — an
+ * `ALTER TABLE` re-run throws "duplicate column name", and it would throw on
+ * every boot and every search, which is a bricked app rather than a bad list.
+ */
 async function currentVersion(db: Db): Promise<number> {
-  try {
-    const rows = await db.all<{ version: number }>(
-      "SELECT MAX(version) AS version FROM schema_migrations",
-    );
-    return rows[0]?.version ?? 0;
-  } catch {
-    // Table does not exist yet — this is a fresh database.
-    return 0;
-  }
+  const table = await db.all<{ name: string }>(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'schema_migrations'",
+  );
+  if (table.length === 0) return 0;
+
+  const rows = await db.all<{ version: number }>(
+    "SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 1",
+  );
+  return rows[0]?.version ?? 0;
 }
 
 /**
@@ -206,6 +229,18 @@ async function currentVersion(db: Db): Promise<number> {
  */
 export async function migrate(db: Db, now: number): Promise<number> {
   const from = await currentVersion(db);
+
+  // Forward-only means an older build cannot read a newer build's database, and
+  // it must say so rather than carry on: the migration loop would skip every
+  // step, leave the newer tables in place, and then fail somewhere further in
+  // on a column it does not know about. Reachable by sideloading an older
+  // installer, or by rolling back a release.
+  if (from > LATEST_SCHEMA_VERSION) {
+    throw new Error(
+      "Your saved jobs were made by a newer version of Cincinnatus. " +
+        "Please update the app to open them.",
+    );
+  }
 
   for (const migration of MIGRATIONS) {
     if (migration.version <= from) continue;

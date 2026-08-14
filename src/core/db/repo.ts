@@ -203,6 +203,16 @@ export async function listRankableJobs(db: Db, now?: number): Promise<Job[]> {
  *
  * Their own thumbs, hides and prepared applications are theirs; a retention
  * rule must not quietly erase them.
+ *
+ * `applications` is checked directly even though saveApplication also writes a
+ * `feedback` row that would spare the job anyway. Defence in depth on purpose:
+ * that coupling is invisible from here, and anything that ever removes an
+ * `applied` feedback row without going through deleteApplication would silently
+ * make the person's own record of where they applied disappear at ninety days.
+ *
+ * Every subquery filters `job_id IS NOT NULL`. A single NULL inside a NOT IN
+ * makes the whole predicate unknown and the DELETE matches nothing at all —
+ * a retention rule that quietly stops running is worse than one that never was.
  */
 export async function purgeStaleAggregatorJobs(db: Db, now: number): Promise<void> {
   const cutoff = now - AGGREGATOR_DELETE_DAYS * 86_400_000;
@@ -212,7 +222,8 @@ export async function purgeStaleAggregatorJobs(db: Db, now: number): Promise<voi
       WHERE source IN (${marks})
         AND last_seen_at < ?
         AND id NOT IN (SELECT job_id FROM feedback)
-        AND id NOT IN (SELECT job_id FROM documents WHERE job_id IS NOT NULL)`,
+        AND id NOT IN (SELECT job_id FROM documents WHERE job_id IS NOT NULL)
+        AND id NOT IN (SELECT job_id FROM applications WHERE job_id IS NOT NULL)`,
     [...AGGREGATOR_SOURCES, cutoff],
   );
 }
@@ -509,7 +520,14 @@ export async function saveApplication(
   db: Db,
   jobId: string,
   now: number,
-): Promise<void> {
+): Promise<boolean> {
+  // Read first, because the Db port exposes no rows-affected count (see
+  // updateApplicationStatus). Single-writer local database, so there is no
+  // race worth defending against here.
+  const existing = await db.all<{ job_id: string }>(
+    "SELECT job_id FROM applications WHERE job_id = ?",
+    [jobId],
+  );
   await db.run(
     `INSERT INTO applications (job_id, status, applied_at, updated_at)
      VALUES (?, 'applied', ?, ?)
@@ -521,19 +539,41 @@ export async function saveApplication(
   // this is what stops a tracked Adzuna listing from being deleted out from
   // under the tracker sixty days later, taking the person's record with it.
   await saveFeedback(db, jobId, "applied", now);
+  // False means "already tracked, and its status was left alone" — the caller
+  // may want to say so rather than imply a second application was recorded.
+  return existing.length === 0;
 }
 
+/**
+ * Move an application's status. Returns false when there was no such row.
+ *
+ * Read-then-write rather than checking rows-affected, because the `Db` port
+ * returns void from `run` — both drivers underneath do report a count, but
+ * widening the port for one caller is a worse trade than one extra SELECT
+ * against a single-writer local database.
+ *
+ * The caller needs the answer: without it, tapping a status on a row that is no
+ * longer there looks exactly like success, and the screen keeps showing an
+ * application the database does not have.
+ */
 export async function updateApplicationStatus(
   db: Db,
   jobId: string,
   status: ApplicationStatus,
   now: number,
-): Promise<void> {
+): Promise<boolean> {
+  const existing = await db.all<{ job_id: string }>(
+    "SELECT job_id FROM applications WHERE job_id = ?",
+    [jobId],
+  );
+  if (existing.length === 0) return false;
+
   await db.run("UPDATE applications SET status = ?, updated_at = ? WHERE job_id = ?", [
     status,
     now,
     jobId,
   ]);
+  return true;
 }
 
 /** Undo a mis-click, including the retention hold saveApplication took. */
@@ -609,6 +649,10 @@ export async function saveDocument(
     [document.kind, document.jobId],
   );
   const version = (rows[0]?.v ?? 0) + 1;
+  // export_path is written NULL and read by nothing. It is reserved, not dead:
+  // SPEC §4 lists it for the save flow, which will record where a person put
+  // the file so the app can answer "where did I save it?". Kept rather than
+  // dropped so that lands as one UPDATE instead of a migration.
   await db.run(
     `INSERT INTO documents (id, kind, job_id, version, content, export_path, created_at)
      VALUES (?, ?, ?, ?, ?, NULL, ?)`,
