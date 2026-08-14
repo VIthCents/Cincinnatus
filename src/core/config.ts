@@ -119,6 +119,21 @@ export const MIN_FIT_FOR_WIDENING = GOOD_MATCH_FIT;
 export const USAJOBS_DEFAULT_WINDOW_DAYS = 7;
 
 /**
+ * Most requests one search may spend against USAJobs.
+ *
+ * Politeness, not a published quota: OPM states no rate limit, but the
+ * structural maximum here is 5 keywords x 20 pages = 100 requests, and at 500
+ * results per page a run that actually needed all of them would be asking a
+ * free government API for 50,000 postings. 25 still allows 12,500, far past
+ * what the veterans-path filter returns in practice — one measured profile
+ * returned 13 postings nationwide.
+ *
+ * The cap is a whole-run budget, not a per-keyword one: a single broad keyword
+ * paginating forever is exactly the case worth stopping.
+ */
+export const USAJOBS_MAX_REQUESTS_PER_RUN = 25;
+
+/**
  * Politeness settings, per host.
  *
  * Lever's robots.txt declares `Crawl-delay: 1`, so one request per second is not

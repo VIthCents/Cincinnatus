@@ -1,0 +1,126 @@
+{
+  "SearchResult": {
+    "SearchResultCount": 1,
+    "SearchResultCountAll": 1,
+    "SearchResultItems": [
+      {
+        "MatchedObjectId": "875949500",
+        "MatchedObjectDescriptor": {
+          "PositionID": "PB-RATE-SAMPLE",
+          "PositionTitle": "Motor Vehicle Operator",
+          "PositionURI": "https://www.usajobs.gov:443/job/875949500",
+          "ApplyURI": ["https://www.usajobs.gov:443/job/875949500"],
+          "PositionLocationDisplay": "Twentynine Palms, California",
+          "PositionLocation": [
+            {
+              "LocationName": "Twentynine Palms, California",
+              "CountryCode": "United States",
+              "CountrySubDivisionCode": "California",
+              "CityName": "Twentynine Palms, California",
+              "Longitude": -116.0548,
+              "Latitude": 34.1356
+            }
+          ],
+          "OrganizationName": "U.S. Marine Corps",
+          "DepartmentName": "Department of the Navy",
+          "JobCategory": [
+            {
+              "Name": "Fire Protection and Prevention",
+              "Code": "0081"
+            }
+          ],
+          "JobGrade": [
+            {
+              "Code": "GS"
+            }
+          ],
+          "PositionSchedule": [
+            {
+              "Name": "",
+              "Code": "1"
+            }
+          ],
+          "PositionOfferingType": [
+            {
+              "Name": "",
+              "Code": "15317"
+            }
+          ],
+          "QualificationSummary": "GS-09: Your resume must demonstrate at least one year of specialized experience at or equivalent to the GS-08 grade level or pay band in the Federal service or equivalent experience in the private or public sector. Specialized experience must demonstrate the following: Providing advanced life support (ALS) emergency medical care as the lead paramedic during emergency incidents; performing fire suppression and prevention activities; providing ambulance transport services; conducting technical rescue and hazardous materials response; participating in emergency communications; and delivering public education, training, and community risk reduction services while exercising independent judgment in patient care and emergency operations. GS-08: Your resume must demonstrate at least one year of specialized experience at or equivalent to the GS-07 grade level or pay band in the Federal service or equivalent experience in the private or public sector. Specialized experience must demonstrate the following: Providing advanced life support (ALS) emergency medical care as part of a firefighting team; supporting fire suppression, ventilation, search and rescue, hazardous materials, and emergency response operations; operating firefighting, rescue, and EMS equipment; and assisting with patient assessment, treatment, stabilization, and transport in accordance with established protocols. Additional qualification information can be found from the following Office of Personnel Management website: https://www.opm.gov/policy-data-oversight/classification-qualifications/general-schedule-qualification-standards/0000/fire-protection-and-prevention-series-0081/ You will receive credit for all qualifying experience, including volunteer and part time experience. You must clearly identify the duties and responsibilities in each position held and the total number of hours per week. Experience refers to paid and unpaid experience, including volunteer work done through National Service programs (e.g., professional, philanthropic, religious, spiritual, community, student, social). Volunteer work helps build critical competencies, knowledge, and skills and can provide valuable training and experience that translates directly to paid employment. All qualifications requirements must be met by the closing date of this announcement and clearly documented in your resume. Additional Conditions of Employment: CERTIFICATIONS REQUIRED: GS-09: At the time of appointment, the incumbent must possess a valid State Driver's License, National Registry or California State Emergency Medical Technician - Paramedic (EMT-P) license, current American Heart Association or equivalent certificate in Cardiovascular Resuscitation (CPR), Firefighter I and Firefighter II, HAZMAT Awareness and HAZMAT Operations IAW DODI 1400.25 Vol 336. GS-08: At the time of appointment, the incumbent must possess a valid State Driver's License, National Registry or California State Emergency Medical Technician - Paramedic (EMT-P) license, current American Heart Association or equivalent certificate in Cardiovascular Resuscitation (CPR), the incumbent must obtain within the first year, Firefighter I and Firefighter II, HAZMAT Awareness and HAZMAT Operations and maintain the above qualifications IAW DODI 1400.25 Vol 336. Must possess or be able to obtain a valid State of California or equivalent driver's license with a Firefighter Endorsement within (180) days of appointment. Incumbent must obtain their EMT-P Accreditation through the Inland County Emergency Medical Agency (ICEMA) within 60 days of employment, maintain certification, and adhere to basic scope of practice standards as defined in Title 22 of the California Code of Regulations, throughout his/her career.",
+          "PositionRemuneration": [
+            {
+              "MinimumRange": "2037.20",
+              "MaximumRange": "2650.40",
+              "RateIntervalCode": "PB",
+              "Description": "Per Biweekly"
+            }
+          ],
+          "PositionStartDate": "2026-07-10T00:00:00.0000",
+          "PositionEndDate": "2027-01-06T23:59:59.9970",
+          "PublicationStartDate": "2026-07-10T00:00:00.0000",
+          "ApplicationCloseDate": "2027-01-06T23:59:59.9970",
+          "PositionFormattedDescription": [
+            {
+              "Label": "Dynamic Teaser",
+              "LabelDescription": "Hit highlighting for keyword searches."
+            }
+          ],
+          "UserArea": {
+            "Details": {
+              "JobSummary": "This is a public notice flyer to notify interested applicants of anticipated vacancies. Applications will not be accepted through this flyer. Interested applicants must follow the directions in the \"How to Apply\" section of this flyer to be considered. There may or may not be actual vacancies filled from this flyer. Notice of Result letters will not be sent to applicants who respond to this flyer.",
+              "WhoMayApply": {
+                "Name": "",
+                "Code": ""
+              },
+              "LowGrade": "8",
+              "HighGrade": "9",
+              "PromotionPotential": "9",
+              "OrganizationCodes": "DD/NV27",
+              "Relocation": "False",
+              "HiringPath": ["public"],
+              "MCOTags": ["NatSec"],
+              "TotalOpenings": "FEW",
+              "AgencyMarketingStatement": "The Navy and Marine Corps team offers innovative, exciting and meaningful work linking military and civilian talents to achieve our mission and safeguard our freedoms. Department of the Navy provides competitive salaries, comprehensive benefits, and extensive professional development and training. From pipefitters to accountants, scientists to engineers, doctors to nurses-the careers and opportunities to make a difference are endless. Civilian careers-where purpose and patriotism unite!",
+              "TravelCode": "1",
+              "MajorDuties": [
+                "You will respond to emergencies as a member of an Engine Company, Truck Company, Rescue Company, Hazardous Materials Team and/or a Rescue Team.",
+                "You will participate in daily training and instruction classes covering all phases of fire protection, fire prevention and emergency medical services.",
+                "You will act as the driver/operator of an emergency response pumper/ladder, brush fire fighting, ambulance, hazardous material response, or other rescue vehicle as required.",
+                "You will respond all hazardous materials incidents as required.",
+                "You will perform daily preventative maintenance inspections of firefighting transport vehicles, tools, and medical equipment.",
+                "You will respond to all medical emergencies and provides advanced patient assessment and treatment for victims of fire, sudden illness, accident injuries, childbirth, and other events requiring medical intervention."
+              ],
+              "Education": "",
+              "Requirements": "",
+              "Evaluations": "In order to qualify for this position, your resume must provide sufficient experience and/or education, knowledge, skills, and abilities to perform the duties of the specific position for which you are being considered. Resumes are restricted to no more than 2 pages. Illegible/unreadable resumes will not be considered. Your resume is the key means we have for evaluating your skills, knowledge, and abilities as they relate to this position. Therefore, we encourage you to be clear and specific when describing your experience. As vacancies occur, the Human Resources Office will review your resume to ensure you meet the hiring eligibility and qualification requirements listed in this flyer. You will be rated based on the information provided in your resume, along with your supporting documentation. If selected, you may be required to provide additional supporting documentation. If after reviewing your resume and supporting documentation, a determination is made that you inflated your qualifications and/or experience, you may be found ineligible/not qualified. Please follow all instructions carefully. Errors or omissions may affect your rating or consideration for employment. All qualification requirements must be met before being considered for any vacancies.",
+              "HowToApply": "Interested Applicants must submit resumes/application packages to: ***THIS IS A DHA FLYER - Applicants should apply by submitting resumes/application packages to: SMB-PLMS-CCFD-JOBS@USMC.MIL with the JOB TITLE and ANNOUNCEMENT NUMBER in the subject line of the email. Facsimile applications WILL NOT be considered. All resumes/applications must be received no later than the close date of this flyer. It is the applicant's responsibility to verify that all information in their resume and documents are received, legible, and accurate. HR will not modify answers/documents by an applicant. Failure to submit a complete application package will result in an ineligible rating and loss of consideration. Agency POC: SMB-PLMS-CCFD-JOBS@USMC.MIL All resumes/applications must be received no later than the close date of this flyer. Resumes are restricted to no more than 2 pages. Illegible/unreadable resumes will not be considered. It is the applicant's responsibility to verify that all information in their resume and documents, are received, legible, and accurate. HR will not modify answers/documents submitted by an applicant. Failure to submit a complete application package will result in an ineligible rating and loss of consideration.",
+              "WhatToExpectNext": "Qualified applicants will be referred to the hiring manager. The selecting official may choose to conduct interviews. Our evaluation will be based on the information you provide. You should expect that we will verify performance, suitability, and security information and take that information into account in making employment offers.",
+              "RequiredDocuments": "A complete resume is required. Resumes are restricted to no more than 2 pages. Illegible/unreadable resumes will not be considered. Your resume must show relevant experience, job title, duties and accomplishments. Your resume must show complete information for each job entry to support minimum qualifications. The following information should be provided in your resume: employer's name, starting and end dates (Mo/Yr), hours per week if experience was less than full time (35-40 hours per week), and pay plan, series and grade level (e.g. GS-0201-09) for relevant federal experience. TIP: A good way to ensure you include all essential information is to use the Resume Builder in USAJOBS to create your resume. Are you claiming membership in any professional organizations, or possession of a license, certificate or credentials? Check the Conditions of Employment section above to see if any are required. If you claim membership, license, certification, or credentials, you must submit a copy of said document in your application package. Are you using education as a substitute for some or all of the experience requirement? Is there a basic education requirement for this position? Check the Education section above to see what is allowed and what is required. Any claims you make in your resume or assessment questionnaire regarding education or degrees MUST be supported by submitting with your application official or unofficial transcripts or a list of courses, grades earned, completion dates, and quarter and semester hours earned issued from your school. While unofficial transcripts are acceptable for initial application, an official transcript will ultimately be required if you are selected for the position. You may submit a copy your degree(s) if specific coursework does not have to be verified. Are you a veteran claiming 5-point veterans' preference or claiming sole survivorship preference? You must submit a copy of your latest DD-214 Certificate of Release or Discharge from Active Duty (any copy that shows all dates of service, as well as character of service [Honorable, General, etc.] is acceptable) OR a VA letter that shows dates of service or service connected disability AND character of service. If you have more than one DD-214 for multiple periods of active duty service, submit a copy for each period of service. If you were issued a DD-215 to amend aforementioned information on the DD-214 you must submit that too. If you are not sure of your preference eligibility, visit the Department of Labor's website: Veterans' Preference Advisor Are you a disabled veteran or claiming 10-point veterans' preference? If you are eligible to claim 10 point veterans preference you must submit a DD-214 Certificate of Release or Discharge from Active Duty as described above for 5-point preference. You must also provide the applicable supporting documentation of your disability (e.g. disability letter from the VA) as described on Standard Form-15 (SF-15). http://www.opm.gov/forms/pdf_fill/SF15.pdf. Are you an active duty service member? Active Duty Service Members are required to submit a statement of service printed on command letterhead and signed by the command. The statement of service must provide the branch of service, rate/rank, all dates of service, the expected date of discharge and anticipated character of service (Honorable, General, etc.). Application documents, including supplemental ones, may be shared outside the Human Resources Office. Supplemental documents may contain your SSN, DOB, or personal information of others (e.g., on military orders, marriage certificates). You may redact this information before submitting; however, if selected, you must provide unredacted originals.",
+              "Benefits": "",
+              "BenefitsUrl": "http://www.secnav.navy.mil/donhr/Benefits/Pages/Default.aspx",
+              "BenefitsDisplayDefaultText": true,
+              "OtherInformation": "Certain incentives (such as Recruitment, Relocation or Student Loan Repayment) may be authorized to eligible selectees. A relocation incentive is generally a single payment intended to offset some of the relocation costs experienced by the selectee. A relocation incentive may or may not be authorized. This position is covered by the Department of Defense Priority Placement Program. Several vacancies may be filled. A tentative offer of employment will be rescinded if the selectee fails to meet the pre-employment requirements, including failure to report to any of the scheduled appointments. Federal annuitant information: The selection of an annuitant is subject to the Department of Defense and Department of the Navy policy on the employment of annuitants. Policy information may be found at: http://www.secnav.navy.mil/donhr/Documents/CivilianJobs/FedCivAnnuitants.pdf. Veteran's preference does not apply when selecting individuals under this specific hiring authority. However, if you claim veteran's preference, you will be required to submit supporting documentation with your application as described in the Required Documents section below.",
+              "KeyRequirements": [],
+              "WithinArea": "False",
+              "CommuteDistance": "0",
+              "ServiceType": "01",
+              "AnnouncementClosingType": "01",
+              "AgencyContactEmail": "smb_29palms_chro_recruiting@usmc.mil",
+              "SecurityClearance": "Secret",
+              "DrugTestRequired": "True",
+              "PositionSensitivitiy": "Noncritical-Sensitive (NCS)/Moderate Risk",
+              "AdjudicationType": ["National security"],
+              "TeleworkEligible": false,
+              "RemoteIndicator": false,
+              "FinancialDisclosure": false,
+              "BargainingUnitStatus": false
+            },
+            "IsRadialSearch": false
+          },
+          "AnnouncementClosingType": "01"
+        },
+        "RelevanceRank": 0
+      }
+    ]
+  }
+}

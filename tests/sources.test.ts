@@ -14,6 +14,7 @@ import {
   HttpStatusError,
 } from "../src/core/sources/source.ts";
 import { fakeClock, fakeHasher, failingHttp, stubHttp } from "./fakes.ts";
+import { USAJOBS_MAX_REQUESTS_PER_RUN } from "../src/core/config.ts";
 import type { FetchContext } from "../src/core/sources/source.ts";
 
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
@@ -234,5 +235,108 @@ describe("USAJobs source", () => {
     expect(first?.url).toMatch(/^https:\/\//);
     // Federal announcements carry a real description under UserArea.Details.
     expect((first?.descriptionText.length ?? 0) > 50).toBe(true);
+  });
+
+  /**
+   * This source used to call ctx.http.get directly, alone among the five. One
+   * 500 on page seven of twenty threw away every federal job the run had
+   * already fetched.
+   */
+  it("retries a transient failure instead of losing the whole source", async () => {
+    const single = { ...options, keywords: ["truck driver"] };
+    const url = buildSearchUrl(single, "truck driver", 1);
+    const http = stubHttp({
+      [url]: [
+        { status: 500, body: "upstream boom" },
+        { body: fixture("usajobs/search.json") },
+      ],
+    });
+
+    const result = await runSource(createUsaJobsSource(single), ctx(http));
+
+    expect(result.error).toBeNull();
+    expect(result.jobs.length).toBeGreaterThan(0);
+    expect(http.calls.length).toBe(2);
+  });
+
+  it("keeps what it already paid for when a later keyword dies", async () => {
+    const both = { ...options, keywords: ["truck driver", "logistics coordinator"] };
+    const good = buildSearchUrl(both, "truck driver", 1);
+    const http = stubHttp({
+      [good]: { body: fixture("usajobs/search.json") },
+      // Every other URL falls through to the stub's 404, which is not
+      // retryable and ends the source.
+    });
+
+    const result = await runSource(createUsaJobsSource(both), ctx(http));
+
+    // The first keyword's jobs survive: they are real, already fetched, and
+    // throwing them away helps nobody.
+    expect(result.error).toBeNull();
+    expect(result.jobs.length).toBeGreaterThan(0);
+  });
+
+  it("still reports an error when it got nothing at all", async () => {
+    const single = { ...options, keywords: ["truck driver"] };
+    const http = stubHttp({});
+    const result = await runSource(createUsaJobsSource(single), ctx(http));
+
+    expect(result.error).not.toBeNull();
+    expect(result.jobs).toEqual([]);
+  });
+
+  it("stops at the per-run request budget", async () => {
+    // A full page every time, so pagination never ends on its own — the case
+    // the budget exists for.
+    const recorded = JSON.parse(fixture("usajobs/search.json")) as {
+      SearchResult: { SearchResultItems: unknown[] };
+    };
+    const template = recorded.SearchResult.SearchResultItems[0];
+    const fullPage = JSON.stringify({
+      SearchResult: {
+        SearchResultItems: Array.from({ length: 500 }, () => template),
+      },
+    });
+
+    const http = {
+      calls: [] as string[],
+      get(req: { url: string }) {
+        http.calls.push(req.url);
+        return Promise.resolve({ status: 200, headers: {}, body: fullPage });
+      },
+    };
+
+    const result = await runSource(
+      createUsaJobsSource({ ...options, keywords: ["a", "b", "c", "d", "e"] }),
+      ctx(http),
+    );
+
+    expect(result.error).toBeNull();
+    expect(http.calls.length).toBe(USAJOBS_MAX_REQUESTS_PER_RUN);
+    // Reported, so the call ledger sees what this source actually spent.
+    expect(result.requests).toBe(USAJOBS_MAX_REQUESTS_PER_RUN);
+  });
+
+  /**
+   * A rate interval we cannot vouch for drops the amounts too. Keeping them and
+   * nulling only the unit prints a bare "$2,037 to $2,650", which reads as an
+   * annual salary — and for a biweekly federal rate that is off by 26x.
+   */
+  it("shows no pay at all rather than a number with a guessed unit", async () => {
+    const single = { ...options, keywords: ["truck driver"] };
+    const url = buildSearchUrl(single, "truck driver", 1);
+    const http = stubHttp({
+      [url]: { body: fixture("usajobs/search-unverified-rate.json") },
+    });
+
+    const result = await runSource(createUsaJobsSource(single), ctx(http));
+
+    expect(result.error).toBeNull();
+    const job = result.jobs[0];
+    expect(job).toBeDefined();
+    expect(job?.salaryInterval).toBeNull();
+    expect(job?.salaryMin).toBeNull();
+    expect(job?.salaryMax).toBeNull();
+    expect(job?.salaryCurrency).toBeNull();
   });
 });

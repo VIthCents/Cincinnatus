@@ -59,18 +59,34 @@ export function createFakeEmbedder(dimensions = 64): Embedder {
   };
 }
 
-/** An Http that serves a fixed map of url -> response and records what was asked. */
+/**
+ * An Http that serves a map of url -> response and records what was asked.
+ *
+ * A url may map to an array instead, which is consumed in order and then
+ * repeats its last entry forever. That is what lets a test say "this URL fails
+ * once, then succeeds" — the shape every retry path has to be tested against,
+ * and one a fixed map cannot express.
+ */
 export function stubHttp(
-  responses: Record<string, Partial<HttpResponse>>,
+  responses: Record<string, Partial<HttpResponse> | Partial<HttpResponse>[]>,
 ): Http & { readonly calls: string[] } {
   const calls: string[] = [];
+  const consumed: Record<string, number> = {};
   return {
     calls,
     get(req: HttpRequest): Promise<HttpResponse> {
       calls.push(req.url);
-      const match = responses[req.url];
-      if (match === undefined) {
+      const entry = responses[req.url];
+      if (entry === undefined) {
         return Promise.resolve({ status: 404, headers: {}, body: "not stubbed" });
+      }
+      let match: Partial<HttpResponse>;
+      if (Array.isArray(entry)) {
+        const seen = consumed[req.url] ?? 0;
+        consumed[req.url] = seen + 1;
+        match = entry[Math.min(seen, entry.length - 1)] ?? {};
+      } else {
+        match = entry;
       }
       return Promise.resolve({
         status: match.status ?? 200,

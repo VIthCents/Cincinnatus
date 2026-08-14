@@ -2,11 +2,13 @@ import type { Job, SalaryInterval } from "../types.ts";
 import { htmlToText, makeDedupeKey, makeJobId } from "../pipeline/normalize.ts";
 import { buildQuery } from "../net/allowlist.ts";
 import {
+  getWithRetry,
   HttpStatusError,
   type FetchContext,
   type Source,
   type SourceFetchResult,
 } from "./source.ts";
+import { USAJOBS_MAX_REQUESTS_PER_RUN } from "../config.ts";
 
 /**
  * USAJobs Search API — federal postings, with the veterans hiring path.
@@ -90,14 +92,32 @@ interface SearchResponse {
   };
 }
 
-/** USAJobs rate-interval codes. */
+/**
+ * USAJobs rate-interval codes we are willing to put a unit on.
+ *
+ * Only codes whose meaning is unambiguous. Anything else — including a code
+ * that arrives here tomorrow — produces no salary at all rather than a number
+ * with a guessed unit, because "Pay not listed" is true and "$2,037 a year"
+ * might not be. See payFields below.
+ *
+ * PB used to map to "year" with a comment admitting it meant "per biweekly
+ * period" and that normalising was "not worth the guess". That is a wrong
+ * number in a veteran's face: a $2,037 biweekly salary rendered as $2,037 a
+ * year, for federal work paying about $53,000.
+ *
+ * PW used to map to "week". Federal payroll code lists give PW as *piece work*
+ * and use BY for biweekly, which would make both of the old entries wrong.
+ * Attempted to verify against the authoritative list at
+ * data.usajobs.gov/api/codelist/remunerationrateintervalcodes on 2026-08-14 and
+ * could not reach it from this environment — so both are left out. If somebody
+ * can reach that endpoint, confirm PB, PW and BY and add them back with the
+ * date in this comment.
+ */
 const INTERVALS: Readonly<Record<string, SalaryInterval>> = {
   PA: "year",
   PH: "hour",
   PD: "day",
-  PW: "week",
   PM: "month",
-  PB: "year", // per biweekly period; normalised upstream is not worth the guess
 };
 
 function parseMoney(value: string | undefined): number | null {
@@ -105,6 +125,38 @@ function parseMoney(value: string | undefined): number | null {
   // MinimumRange/MaximumRange are strings, sometimes with decimals.
   const n = Number.parseFloat(value);
   return Number.isFinite(n) && n > 0 ? Math.round(n) : null;
+}
+
+/**
+ * The three pay fields, together, because they only make sense together.
+ *
+ * An unrecognised rate interval drops the amounts as well as the unit. Keeping
+ * the amounts and nulling only the interval looks careful and is not: the card
+ * falls through to a bare range and prints "$2,037 to $2,650" with no unit at
+ * all, which reads as an annual salary to anyone scanning a list. Adzuna
+ * already drops both for the same reason.
+ */
+function payFields(
+  pay: Remuneration | undefined,
+): Pick<Job, "salaryMin" | "salaryMax" | "salaryCurrency" | "salaryInterval"> {
+  const none = {
+    salaryMin: null,
+    salaryMax: null,
+    salaryCurrency: null,
+    salaryInterval: null,
+  };
+  if (pay === undefined) return none;
+
+  const code = pay.RateIntervalCode;
+  const interval = code === undefined ? null : (INTERVALS[code] ?? null);
+  if (interval === null) return none;
+
+  return {
+    salaryMin: parseMoney(pay.MinimumRange),
+    salaryMax: parseMoney(pay.MaximumRange),
+    salaryCurrency: "USD",
+    salaryInterval: interval,
+  };
 }
 
 function buildDescription(d: MatchedObjectDescriptor): string {
@@ -150,13 +202,7 @@ export function normalizeUsaJobsPosting(
     // as remote — a telework-eligible job can still require weekly office days.
     // Reporting it as remote would be inventing a fact (constraint 4).
     remote: location !== null && /\bremote\b/i.test(location) ? true : null,
-    salaryMin: parseMoney(pay?.MinimumRange),
-    salaryMax: parseMoney(pay?.MaximumRange),
-    salaryCurrency: pay === undefined ? null : "USD",
-    salaryInterval:
-      pay?.RateIntervalCode === undefined
-        ? null
-        : (INTERVALS[pay.RateIntervalCode] ?? null),
+    ...payFields(pay),
     // ApplyURI is an array; its first entry carries the RESTAPI posting channel.
     url: d.ApplyURI?.[0] ?? d.PositionURI ?? "https://www.usajobs.gov/",
     postedAt: postedValid ? postedAt : null,
@@ -224,18 +270,50 @@ export function createUsaJobsSource(options: UsaJobsOptions): Source {
       const keywords = options.keywords.slice(0, MAX_KEYWORDS);
       if (keywords.length === 0) keywords.push("");
 
+      const headers = {
+        host: "data.usajobs.gov",
+        // Must be the email the key was registered with. A generic or
+        // empty User-Agent gets a 403 Akamai HTML page, not JSON.
+        "user-agent": options.auth.userAgentEmail,
+        "authorization-key": options.auth.apiKey,
+      };
+
+      let requests = 0;
+      // A whole-run budget, so one broad keyword cannot paginate away the
+      // politeness margin. Checked across both loops, not just the inner one.
+      let budgetSpent = false;
+
       for (const keyword of keywords) {
+        if (budgetSpent) break;
+
         for (let page = 1; page <= MAX_PAGES; page++) {
-          const response = await ctx.http.get({
-            url: buildSearchUrl(options, keyword, page),
-            headers: {
-              host: "data.usajobs.gov",
-              // Must be the email the key was registered with. A generic or
-              // empty User-Agent gets a 403 Akamai HTML page, not JSON.
-              "user-agent": options.auth.userAgentEmail,
-              "authorization-key": options.auth.apiKey,
-            },
-          });
+          if (requests >= USAJOBS_MAX_REQUESTS_PER_RUN) {
+            budgetSpent = true;
+            break;
+          }
+
+          let response;
+          try {
+            requests++;
+            response = await getWithRetry(
+              ctx,
+              buildSearchUrl(options, keyword, page),
+              label,
+              null,
+              headers,
+            );
+          } catch (err) {
+            // Retries are exhausted, or the key was refused. Anything already
+            // fetched is real and still useful, so keep it rather than throwing
+            // a whole run's federal results away over one bad page — the same
+            // partial-keep Adzuna does. With nothing fetched there is nothing
+            // to salvage and the error is the honest answer, which is also what
+            // keeps a rejected key surfacing as "would not accept our key".
+            if (jobs.length > 0) {
+              return { jobs, notModified: false, newState: null, requests };
+            }
+            throw err;
+          }
 
           if (response.status !== 200) {
             throw new HttpStatusError(
@@ -268,7 +346,7 @@ export function createUsaJobsSource(options: UsaJobsOptions): Source {
       }
 
       // The search endpoint does not offer useful conditional-request support.
-      return { jobs, notModified: false, newState: null };
+      return { jobs, notModified: false, newState: null, requests };
     },
   };
 }

@@ -1411,3 +1411,58 @@ Documented behaviour that does not exist is worse than no documentation.
 
 The NDCG floors are not ratcheted: 0.5651 against 0.55 is noise-level movement, not an improvement
 to lock in.
+
+---
+
+## 2026-08-14 — USAJobs gets the retry every other source already had, and stops guessing at pay
+
+**Context.** Three faults, found reading the source against its four siblings.
+
+It called `ctx.http.get` directly — the only source of the five that skipped `getWithRetry`. Since
+it paginates up to 20 pages across up to 5 keywords, a single 429 or 502 on any one of those pages
+threw, and `runSource` turned the whole federal source into an error for that run. Every job already
+fetched went with it.
+
+It had no request budget. The structural maximum is 5 x 20 = 100 requests at 500 results each, and
+it returned no `requests` count, so `recordCalls` never fired and the call ledger could not see it.
+
+And `INTERVALS` mapped `PB` to `"year"` under a comment that admitted `PB` means _per biweekly
+period_ and that normalising it was "not worth the guess". It is worth the guess: a $2,037 biweekly
+rate was being printed as "$2,037 a year" for work that pays about $53,000.
+
+**Decision.** `getWithRetry` gains an optional `extraHeaders` argument — USAJobs is the one source
+that authenticates per request — and USAJobs goes through it. 401 and 403 stay non-retryable, so a
+refused key still surfaces as "would not accept our key" rather than being retried four times.
+
+Retries exhausted mid-run now keep what was already fetched, matching Adzuna. Only a run that
+fetched nothing throws, which is what keeps a bad key visible.
+
+`USAJOBS_MAX_REQUESTS_PER_RUN = 25`, enforced across both loops so one broad keyword cannot spend
+the whole budget paginating, and returned as `requests`.
+
+On pay: only codes whose meaning is unambiguous get a unit — `PA`, `PH`, `PD`, `PM`. Everything else
+yields **no salary at all**, amounts included.
+
+Dropping the amounts as well as the unit is the part that matters. Nulling only the interval leaves
+`salaryWords` to fall through to a bare "$2,037 to $2,650", which reads as an annual figure to
+anyone scanning a list — the same wrong impression, with the app's fingerprints wiped off.
+
+`PW` is removed too, and that is a live question rather than a cleanup. It was mapped to `"week"`;
+federal payroll code lists give `PW` as **piece work** and use `BY` for biweekly. If that is right,
+the old table had two wrong entries rather than one.
+
+Attempted to settle it against `data.usajobs.gov/api/codelist/remunerationrateintervalcodes` on
+2026-08-14 and could not reach the endpoint from this environment (connection reset, twice; the
+developer-portal reference page timed out). So this is deliberately unresolved and marked as such in
+the code: PB, PW and BY are all left out until somebody can read the authoritative list.
+
+**Consequence.** Federal jobs paid by any interval other than year, hour, day or month show "Pay not
+listed" instead of a number. That is a real loss of information, and it is the right trade: those
+codes are rare next to `PA` and `PH`, and constraint 4 is about what the app asserts, not only about
+what the AI writes. A number with the wrong unit is a fabricated fact whether a model or a lookup
+table produced it.
+
+Test fixtures now cover a retry that recovers, a keyword that dies after another succeeded, the
+request budget, and an unverified rate code. `stubHttp` grew sequenced responses to make the first
+of those expressible at all — it served one fixed response per URL, so "fails once, then succeeds"
+could not be written.

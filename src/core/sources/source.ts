@@ -119,14 +119,19 @@ function isRetryable(status: number): boolean {
  *
  * Jitter comes from the Clock port rather than Math.random so a test can replay
  * a backoff sequence exactly.
+ *
+ * `extraHeaders` exists for sources that must authenticate per request —
+ * USAJobs needs an authorization key and a registered User-Agent. They are
+ * merged over the conditional headers, which never overlap in practice.
  */
 export async function getWithRetry(
   ctx: FetchContext,
   url: string,
   label: string,
   conditional: ConditionalState | null,
+  extraHeaders: Readonly<Record<string, string>> = {},
 ): Promise<HttpResponse> {
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = { ...extraHeaders };
   if (conditional?.etag) headers["if-none-match"] = conditional.etag;
   if (conditional?.lastModified)
     headers["if-modified-since"] = conditional.lastModified;
