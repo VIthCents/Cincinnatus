@@ -1466,3 +1466,52 @@ Test fixtures now cover a retry that recovers, a keyword that dies after another
 request budget, and an unverified rate code. `stubHttp` grew sequenced responses to make the first
 of those expressible at all — it served one fixed response per URL, so "fails once, then succeeds"
 could not be written.
+
+---
+
+## 2026-08-14 — Two collected profile fields start doing something; the third is ruled out
+
+**Context.** Three fields on `Profile` were gathered and then ignored, which is worse than not
+gathering them: the app appears to accept an instruction and silently discards it.
+
+`remotePreference` can be `"prefer_onsite"` — the wizard has offered that answer since it shipped —
+but `isWithinReach` only ever branched on `"remote_only"`. Someone who said they cannot work remote
+had remote jobs counted toward "there is enough work near you" exactly as if they were down the road.
+
+`salaryFloor` is parsed by `parse.ts`, set in both committed fixture profiles (55,000 and 45,000),
+and read by nothing at all.
+
+`radiusMiles` reaches only Adzuna's `distance` parameter, which `adzuna.ts` itself documents as
+unreliable ("Raleigh, 60 miles away, appears at distance=40"). The wizard never asks for it.
+
+**Decision.**
+
+**`prefer_onsite` is wired**, in `isWithinReach`: a remote job no longer counts as _nearby_ for that
+person. It is not hidden — that is the difference between "prefer" and "never". If the local list is
+thin, widening still surfaces remote work, labelled, which composes with the quality-aware widening
+rule from 2026-08-09 rather than fighting it. No score adjustment: nudging scores by preference is
+the path measured harmful on 2026-08-11, and this is a filter question, not a ranking one.
+
+**`salaryFloor` is wired narrowly.** A job is dropped only when the employer _stated_ pay and the
+top of the stated range, annualised, falls under the floor. Annualisation is arithmetic on a figure
+the employer published — hour x 2080, day x 260, week x 52, month x 12 — not a guess.
+
+Two deliberate limits. It tests `salaryMax`, not `salaryMin`: a range that starts low and ends high
+is a job worth showing, and only a range that tops out under the floor is unambiguous. And silence
+is never treated as a low offer — the majority of postings state no pay at all, every Adzuna row
+among them, so this can never quietly starve a thin list.
+
+**`radiusMiles` stays as it is, and that is now a decision rather than an oversight.** Enforcing a
+real radius locally requires geocoding: another network service, another allowlist entry, another
+paragraph in PRIVACY.md, against constraint 7. State-level reach is the deliberate resolution. The
+wizard does not ask for the number, so nothing is being collected and ignored; it does real work
+narrowing the Adzuna query, and that is all it claims to do. Revisit only if a vendored ZIP-centroid
+table ever justifies itself.
+
+**Consequence.** Neither wiring can move the measured rank-eval gates, and this was checked rather
+than assumed: both golden profiles are `remotePreference: "any"`, and `rankEval`'s `toJob` nulls
+every salary field. Re-measured after the change — CDL 0.5651, infantry 0.7452 — identical to
+before it.
+
+The `TODO(location)` marker in `rank.ts` stays. It refers to the geocoding question, which this
+entry rules on but does not solve.

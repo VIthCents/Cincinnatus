@@ -151,6 +151,99 @@ describe("the blend", () => {
   });
 });
 
+describe("remote preference", () => {
+  const onsite: Profile = { ...profile, remotePreference: "prefer_onsite" };
+
+  /**
+   * "Prefer onsite" is an answer the wizard has offered since it shipped and
+   * nothing had ever read: someone who said they cannot work remote saw remote
+   * jobs counted as if they were down the road.
+   */
+  it("does not count a remote job as nearby for someone who prefers onsite", () => {
+    expect(isWithinReach(job({ id: "a", remote: true }), onsite)).toBe(false);
+    expect(isWithinReach(job({ id: "a", remote: true }), profile)).toBe(true);
+  });
+
+  it("still counts a local job as nearby for them", () => {
+    expect(isWithinReach(job({ id: "a", location: "Austin, TX" }), onsite)).toBe(true);
+  });
+
+  /**
+   * "Prefer", not "never": the job is not hidden, it just does not count
+   * toward there being enough work near this person. If the local list is
+   * thin, widening shows it — labelled — which is the honest reading.
+   */
+  it("still shows remote jobs once the search widens", () => {
+    const remoteJob = job({ id: "r", remote: true, location: "Remote" });
+    const out = rankJobs({
+      jobs: [remoteJob],
+      vectors: new Map(),
+      profileVector: null,
+      profile: onsite,
+      now: NOW,
+    });
+    expect(out.widenedBeyondRadius).toBe(true);
+    expect(out.ranked.map((r) => r.job.id)).toEqual(["r"]);
+  });
+
+  it("leaves a job whose source did not say alone", () => {
+    expect(
+      isWithinReach(job({ id: "a", remote: null, location: "Austin, TX" }), onsite),
+    ).toBe(true);
+  });
+});
+
+describe("the salary floor", () => {
+  const picky: Profile = { ...profile, salaryFloor: 45_000 };
+
+  function ranked(job: Job, p: Profile = picky): readonly string[] {
+    return rankJobs({
+      jobs: [job],
+      vectors: new Map(),
+      profileVector: null,
+      profile: p,
+      now: NOW,
+    }).ranked.map((r) => r.job.id);
+  }
+
+  it("drops a job whose stated pay tops out under the floor", () => {
+    // $14/hour is about $29,120 a year.
+    const lowPaid = job({
+      id: "a",
+      salaryMin: 13,
+      salaryMax: 14,
+      salaryInterval: "hour",
+    });
+    expect(ranked(lowPaid)).toEqual([]);
+  });
+
+  it("keeps a job that states no pay at all", () => {
+    // Most postings, and every Adzuna row. Silence is not a low offer, and
+    // treating it as one would empty the list.
+    expect(ranked(job({ id: "a" }))).toEqual(["a"]);
+  });
+
+  it("keeps a range that starts below the floor but reaches above it", () => {
+    const wide = job({
+      id: "a",
+      salaryMin: 38_000,
+      salaryMax: 62_000,
+      salaryInterval: "year",
+    });
+    expect(ranked(wide)).toEqual(["a"]);
+  });
+
+  it("does nothing at all when the person set no floor", () => {
+    const lowPaid = job({
+      id: "a",
+      salaryMin: 13,
+      salaryMax: 14,
+      salaryInterval: "hour",
+    });
+    expect(ranked(lowPaid, profile)).toEqual(["a"]);
+  });
+});
+
 describe("dedupe", () => {
   it("keeps the earliest first_seen as canonical", () => {
     const older = job({ id: "b", firstSeenAt: NOW - 10 * DAY, dedupeKey: "same" });

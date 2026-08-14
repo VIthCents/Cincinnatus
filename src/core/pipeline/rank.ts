@@ -27,7 +27,12 @@ import { reachAdjustedSimilarity } from "./reach.ts";
  * TODO(location): revisit in Phase 4 if the ranked list proves too permissive.
  */
 export function isWithinReach(job: Job, profile: Profile): boolean {
-  if (job.remote === true) return true;
+  // "Prefer onsite" means a remote job does not count toward there being
+  // enough work near this person — not that it is hidden. If the local list is
+  // thin, widening still shows remote roles, labelled, which is what "prefer"
+  // means as opposed to "never". The wizard has offered this answer since it
+  // shipped and nothing had ever read it.
+  if (job.remote === true) return profile.remotePreference !== "prefer_onsite";
   if (profile.remotePreference === "remote_only") return false;
 
   // No stated location means everywhere is acceptable.
@@ -43,6 +48,44 @@ export function isWithinReach(job: Job, profile: Profile): boolean {
   if (state !== "" && new RegExp(`\\b${state}\\b`).test(haystack)) return true;
 
   return false;
+}
+
+/** Stated pay, expressed per year. */
+const PERIODS_PER_YEAR: Readonly<Record<string, number>> = {
+  hour: 2080,
+  day: 260,
+  week: 52,
+  month: 12,
+  year: 1,
+};
+
+/**
+ * Drop a job only when the employer said what it pays and said it pays less
+ * than this person will accept.
+ *
+ * Deliberately narrow. It can only ever remove a job that published a figure
+ * below the floor, so it cannot quietly starve a thin list: the majority of
+ * postings — every Adzuna row among them — state no salary at all and are
+ * untouched. `salaryMax` is the test, not `salaryMin`, because a range that
+ * tops out under the floor is the only unambiguous case; a range that starts
+ * low and ends high is a job worth showing.
+ *
+ * Until now `salaryFloor` was parsed, stored, and read by nothing, which is
+ * worse than not collecting it: both committed fixture profiles set it, so the
+ * harness has been quietly ignoring an instruction it appeared to accept.
+ */
+function paysBelowFloor(job: Job, profile: Profile): boolean {
+  const floor = profile.salaryFloor;
+  if (floor === null || floor <= 0) return false;
+  if (job.salaryInterval === null) return false;
+
+  const periods = PERIODS_PER_YEAR[job.salaryInterval];
+  if (periods === undefined) return false;
+
+  const top = job.salaryMax ?? job.salaryMin;
+  if (top === null) return false;
+
+  return top * periods < floor;
 }
 
 export interface RankInput {
@@ -111,6 +154,7 @@ export function rankJobs(input: RankInput): RankOutput {
     // A collapsed duplicate is represented by its canonical row.
     if (job.canonicalId !== null) continue;
     if (isExcluded(profile, job.title, job.company)) continue;
+    if (paysBelowFloor(job, profile)) continue;
 
     const vector = vectors.get(job.id);
     // Vectors are L2-normalized, so the dot product is the cosine.
