@@ -11,7 +11,7 @@ import { tailorResume, jobToPromptText } from "../src/core/documents/tailor.ts";
 import { reviseResume } from "../src/core/documents/revise.ts";
 import { analyzeResume } from "../src/core/documents/analyze.ts";
 import { parseResume } from "../src/core/documents/parseResume.ts";
-import { writeCoverLetter } from "../src/core/documents/coverletter.ts";
+import { stripSignature, writeCoverLetter } from "../src/core/documents/coverletter.ts";
 import {
   formatResumeDate,
   resumeToDocxBase64,
@@ -110,6 +110,141 @@ describe("verifyResume", () => {
       skills: ["Dispatch"],
     });
     expect(verifyResume(BASE, tailored)).toEqual([]);
+  });
+
+  /**
+   * Bullets were not scanned at all until 2026-08-14. The structured
+   * comparison checks employer, title, dates and hours and never reads bullet
+   * text, so a clearance or a degree invented inside an achievement line
+   * passed clean — the one place a tailoring model has room to embellish.
+   */
+  it("flags a clearance invented inside an experience bullet", () => {
+    const tailored = tailoredCopy({
+      experience: [
+        {
+          ...BASE.experience[0]!,
+          bullets: [
+            ...BASE.experience[0]!.bullets,
+            "Held a TS/SCI clearance while supporting corps-level movement",
+          ],
+        },
+        BASE.experience[1]!,
+      ],
+    });
+    const findings = verifyResume(BASE, tailored);
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({ kind: "changed_clearance", severity: "high" });
+  });
+
+  it("flags a degree invented inside an experience bullet", () => {
+    const tailored = tailoredCopy({
+      experience: [
+        {
+          ...BASE.experience[0]!,
+          bullets: ["Applied MBA coursework to fleet budgeting"],
+        },
+        BASE.experience[1]!,
+      ],
+    });
+    const findings = verifyResume(BASE, tailored);
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({ kind: "unsupported_claim", severity: "high" });
+    expect(findings[0]!.value).toContain("master");
+  });
+
+  it("emits one finding, not one per bullet, when a claim repeats", () => {
+    // A stack of identical high-severity alarms is how someone learns to click
+    // past the check that matters.
+    const tailored = tailoredCopy({
+      experience: [
+        {
+          ...BASE.experience[0]!,
+          bullets: [
+            "Held a TS/SCI clearance for corps movement",
+            "Briefed staff while holding a TS/SCI clearance",
+          ],
+        },
+        BASE.experience[1]!,
+      ],
+    });
+    expect(verifyResume(BASE, tailored)).toHaveLength(1);
+  });
+
+  /**
+   * The other half of the same change. Tailoring keeps bullets close to
+   * verbatim, so scanning them without crediting the base resume's own prose
+   * would flag a carried-over sentence as a fabrication on every single
+   * document — and this is the shape that actually occurs: a 42A whose work IS
+   * clearance processing, and a senior NCO who counselled soldiers through
+   * degree programmes.
+   */
+  it("does not flag a clearance the base resume states in prose", () => {
+    const proseBase: ResumeData = {
+      ...BASE,
+      clearance: null,
+      experience: [
+        {
+          ...BASE.experience[0]!,
+          bullets: ["Processed 200 security clearance investigations"],
+        },
+        BASE.experience[1]!,
+      ],
+    };
+    const tailored: ResumeData = {
+      ...proseBase,
+      experience: [
+        {
+          ...proseBase.experience[0]!,
+          bullets: [
+            "Processed 200 security clearance investigations for the battalion",
+          ],
+        },
+        proseBase.experience[1]!,
+      ],
+    };
+    expect(verifyResume(proseBase, tailored)).toEqual([]);
+  });
+
+  it("does not flag a degree the base resume mentions for other people", () => {
+    const proseBase: ResumeData = {
+      ...BASE,
+      experience: [
+        {
+          ...BASE.experience[0]!,
+          bullets: ["Counseled 12 soldiers completing associate degrees"],
+        },
+        BASE.experience[1]!,
+      ],
+    };
+    expect(verifyResume(proseBase, tailoredCopy({ ...proseBase }))).toEqual([]);
+  });
+
+  /**
+   * The line the prose credit must not cross: a real Army course whose name
+   * merely contains the word "master" cannot license a master's degree. The
+   * strict pattern needs "master of/in/degree"; "Master Driver Trainer" has
+   * none of them, which is exactly why prose is matched strictly and education
+   * credentials loosely.
+   */
+  it("still flags a master's degree when the base only ran a Master Driver course", () => {
+    const proseBase: ResumeData = {
+      ...BASE,
+      experience: [
+        {
+          ...BASE.experience[0]!,
+          bullets: ["Completed the Master Driver Trainer course"],
+        },
+        BASE.experience[1]!,
+      ],
+    };
+    const tailored: ResumeData = {
+      ...proseBase,
+      summary:
+        "Logistics leader holding a Master of Science in Supply Chain Management",
+    };
+    const findings = verifyResume(proseBase, tailored);
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({ kind: "unsupported_claim", severity: "high" });
   });
 
   it("flags an added certification as high severity", () => {
@@ -260,6 +395,47 @@ describe("verifyResume", () => {
 // -----------------------------------------------------------------------------
 // verifyCoverLetter
 // -----------------------------------------------------------------------------
+
+/**
+ * The guard behind the schema. Observed live on 2026-08-09: the model put the
+ * name in `closing` as well, and the DOCX template adds it again, so the letter
+ * signed itself twice. The prompt asks for a valediction only; this is what
+ * makes it true.
+ */
+describe("stripSignature", () => {
+  it("removes the name line and keeps the valediction", () => {
+    expect(stripSignature("Sincerely,\nDanielle R. Okafor", "Danielle R. Okafor")).toBe(
+      "Sincerely,",
+    );
+  });
+
+  it("ignores case and surrounding whitespace on the name line", () => {
+    expect(
+      stripSignature("Sincerely,\n  DANIELLE R. OKAFOR  ", "Danielle R. Okafor"),
+    ).toBe("Sincerely,");
+  });
+
+  it("falls back to a valediction when the closing was only the name", () => {
+    expect(stripSignature("Danielle R. Okafor", "Danielle R. Okafor")).toBe(
+      "Sincerely,",
+    );
+  });
+
+  it("leaves the closing alone when the name is empty", () => {
+    expect(stripSignature("  Warm regards,  ", "")).toBe("Warm regards,");
+  });
+
+  /**
+   * Deliberately conservative: only a line that IS the name goes. A line that
+   * merely contains it is prose, and deleting prose from someone's letter is a
+   * worse failure than leaving a stray name.
+   */
+  it("keeps a line that contains the name rather than being it", () => {
+    expect(
+      stripSignature("Sincerely,\n— Danielle R. Okafor", "Danielle R. Okafor"),
+    ).toBe("Sincerely,\n— Danielle R. Okafor");
+  });
+});
 
 describe("verifyCoverLetter", () => {
   const cleanLetter: CoverLetter = {

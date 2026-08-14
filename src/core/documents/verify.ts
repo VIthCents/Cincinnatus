@@ -291,11 +291,25 @@ export function verifyResume(
   }
 
   // --- free text ------------------------------------------------------------
-  if (produced.summary !== null) {
-    findings.push(...scanTextForClaims(produced.summary, base));
-  }
+  // Summary and bullets, scanned as ONE text rather than one call per bullet.
+  // Per-bullet calls would emit the same high-severity finding once per bullet
+  // whenever the model repeats a claim, and a stack of identical alarms is how
+  // you teach someone to click past the one that matters.
+  //
+  // Bullets were not scanned at all before this, so a tailored resume could
+  // claim a TS/SCI clearance or an MBA inside an achievement line and pass
+  // clean: the experience comparison above checks employer, title, dates and
+  // hours, and never reads the bullet text.
+  findings.push(...scanTextForClaims(freeTextOf(produced), base));
 
   return findings;
+}
+
+/** A resume's own prose: the summary plus every experience bullet. */
+function freeTextOf(resume: ResumeData): string {
+  return [resume.summary ?? "", ...resume.experience.flatMap((e) => e.bullets)].join(
+    "\n",
+  );
 }
 
 // -----------------------------------------------------------------------------
@@ -343,10 +357,23 @@ export function scanTextForClaims(text: string, base: ResumeData): readonly Find
   const findings: Finding[] = [];
   const baseClearance = base.clearance === null ? "" : norm(base.clearance);
 
+  // What the base resume says in its own prose, not just in its structured
+  // fields. Tailoring keeps most bullets close to verbatim, so without this
+  // every veteran whose clearance lives in a sentence rather than in a
+  // `clearance:` field — "Held a Secret clearance for six years", or a 42A's
+  // "Processed 200 security clearance investigations" — gets a high-severity
+  // fabrication alarm on every document the app produces for them. A claim
+  // already present in the base resume is not a fabrication by definition, and
+  // crying wolf on every document is how the one real catch gets clicked past.
+  const baseText = freeTextOf(base);
+
   // Clearance claims. "Top Secret"/"TS/SCI" needs a top-secret base clearance;
   // any "... clearance" phrase needs some base clearance.
   if (/\btop.secret\b|\bts\/sci\b/i.test(text)) {
-    if (!/top secret|ts sci|\bts\b/.test(baseClearance)) {
+    if (
+      !/top secret|ts sci|\bts\b/.test(baseClearance) &&
+      !/\btop.secret\b|\bts\/sci\b/i.test(baseText)
+    ) {
       findings.push({
         kind: "changed_clearance",
         value: "Top Secret",
@@ -357,7 +384,11 @@ export function scanTextForClaims(text: string, base: ResumeData): readonly Find
             : `The text claims a Top Secret clearance, but your resume states "${base.clearance}".`,
       });
     }
-  } else if (/\b(security|secret) clearance\b/i.test(text) && baseClearance === "") {
+  } else if (
+    /\b(security|secret) clearance\b/i.test(text) &&
+    baseClearance === "" &&
+    !/\b(security|secret) clearance\b/i.test(baseText)
+  ) {
     findings.push({
       kind: "changed_clearance",
       value: "security clearance",
@@ -367,9 +398,27 @@ export function scanTextForClaims(text: string, base: ResumeData): readonly Find
   }
 
   // Degree claims.
+  //
+  // Support comes from the education section via the loose `supportedBy`, and
+  // from the base resume's prose via the STRICT `pattern`. The asymmetry is the
+  // whole point. Against prose, `supportedBy` would let "Master Driver Trainer
+  // course" — a real Army course, and a bullet a truck driver's resume really
+  // carries — license a claim of "M.S. in Logistics", because it matches the
+  // bare word "master". The strict pattern needs "master of/in/degree", which
+  // that bullet does not contain and a genuine mention does.
+  //
+  // What this deliberately gives up: a base bullet about helping *other people*
+  // toward degrees ("Counseled 12 soldiers completing associate degrees" — a
+  // stock senior-NCO line) will also license the same claim about the veteran.
+  // The alternative is flagging that bullet as fabricated every single time it
+  // is carried through, which is the noisier and more damaging error.
   const credentials = base.education.map((e) => e.credential).join(" ");
   for (const degree of DEGREE_PATTERNS) {
-    if (degree.pattern.test(text) && !degree.supportedBy.test(credentials)) {
+    if (
+      degree.pattern.test(text) &&
+      !degree.supportedBy.test(credentials) &&
+      !degree.pattern.test(baseText)
+    ) {
       findings.push({
         kind: "unsupported_claim",
         value: degree.label,
