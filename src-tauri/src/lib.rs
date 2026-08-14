@@ -73,20 +73,61 @@ fn get_secret(app: AppHandle, name: String) -> Result<Option<String>, String> {
             // Falls back to the old file so a user who has not been migrated
             // yet — or whose migration is still pending a retry — keeps working.
             let secrets = read_secrets(&app)?;
-            Ok(secrets.get(&name).and_then(|v| v.as_str()).map(String::from))
+            Ok(secrets
+                .get(&name)
+                .and_then(|v| v.as_str())
+                .map(String::from))
         }
         Err(e) => Err(format!("could not read the key: {e}")),
     }
 }
 
+/// Remove one key from the legacy plaintext file, if both still exist.
+///
+/// Best effort by design: this runs alongside a keychain delete that has
+/// already succeeded, and failing to tidy up an old file must not turn a
+/// successful removal into an error the person cannot act on.
+fn remove_from_secrets_file(path: &std::path::Path, name: &str) {
+    if !path.exists() {
+        return;
+    }
+    let Ok(text) = fs::read_to_string(path) else {
+        return;
+    };
+    let Ok(serde_json::Value::Object(mut map)) = serde_json::from_str(&text) else {
+        return;
+    };
+    if map.remove(name).is_none() {
+        return;
+    }
+    let _ = if map.is_empty() {
+        fs::remove_file(path)
+    } else {
+        fs::write(path, serde_json::Value::Object(map).to_string())
+    };
+}
+
 #[tauri::command]
-fn set_secret(name: String, value: String) -> Result<(), String> {
+fn set_secret(app: AppHandle, name: String, value: String) -> Result<(), String> {
     let entry = entry(&name)?;
     if value.is_empty() {
-        return match entry.delete_credential() {
+        let removed = match entry.delete_credential() {
             Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
             Err(e) => Err(format!("could not remove the key: {e}")),
         };
+        // Also scrub the legacy file, or "Remove the key" is a lie whenever a
+        // migration has not completed. migrate_secrets deliberately deletes
+        // nothing it could not verify, so the plaintext file can still hold the
+        // key — and get_secret falls back to it on NoEntry. The key would come
+        // back on the next read, the UI would have said it was removed, and the
+        // person would keep being billed for a key they told us to forget.
+        //
+        // Scrubbed even when the keychain delete failed: the file copy is the
+        // one that silently resurrects, so it is the one that must go.
+        if let Ok(path) = secrets_path(&app) {
+            remove_from_secrets_file(&path, &name);
+        }
+        return removed;
     }
     entry
         .set_password(&value)
@@ -196,7 +237,8 @@ pub fn run() {
             }
 
             // --- tray -------------------------------------------------------
-            let search = MenuItem::with_id(app, "search_now", "Search for jobs now", true, None::<&str>)?;
+            let search =
+                MenuItem::with_id(app, "search_now", "Search for jobs now", true, None::<&str>)?;
             let open = MenuItem::with_id(app, "open", "Open Cincinnatus", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&search, &open, &quit])?;
@@ -242,7 +284,68 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::KEYCHAIN_SERVICE;
+    use super::{remove_from_secrets_file, KEYCHAIN_SERVICE};
+    use std::fs;
+
+    fn scratch(name: &str) -> std::path::PathBuf {
+        let path = std::env::temp_dir().join(format!("cincinnatus-test-{name}.json"));
+        let _ = fs::remove_file(&path);
+        path
+    }
+
+    /// The legacy plaintext file must give up a key when the person removes it.
+    ///
+    /// Without this, "Remove the key" removes only the keychain copy; if a
+    /// migration has not completed, get_secret falls back to the file and the
+    /// key returns — while the UI says it is gone and the billing continues.
+    #[test]
+    fn removing_a_key_scrubs_it_from_the_legacy_file() {
+        let path = scratch("scrub");
+        fs::write(
+            &path,
+            r#"{"anthropic_api_key":"sk-ant-secret","usajobs_api_key":"other"}"#,
+        )
+        .unwrap();
+
+        remove_from_secrets_file(&path, "anthropic_api_key");
+
+        let left = fs::read_to_string(&path).unwrap();
+        assert!(!left.contains("sk-ant-secret"));
+        // The other key is untouched: removing one is not removing all.
+        assert!(left.contains("other"));
+        let _ = fs::remove_file(&path);
+    }
+
+    /// Nothing left to hold means nothing left to leak.
+    #[test]
+    fn removing_the_last_key_deletes_the_legacy_file() {
+        let path = scratch("scrub-last");
+        fs::write(&path, r#"{"anthropic_api_key":"sk-ant-secret"}"#).unwrap();
+
+        remove_from_secrets_file(&path, "anthropic_api_key");
+
+        assert!(!path.exists());
+    }
+
+    /// Best effort: a missing file, a corrupt file, or a name that was never
+    /// there must all be no-ops rather than errors, because this runs after a
+    /// keychain delete that already succeeded.
+    #[test]
+    fn scrubbing_is_a_no_op_when_there_is_nothing_to_scrub() {
+        remove_from_secrets_file(&scratch("absent"), "anthropic_api_key");
+
+        let corrupt = scratch("corrupt");
+        fs::write(&corrupt, "not json at all").unwrap();
+        remove_from_secrets_file(&corrupt, "anthropic_api_key");
+        assert_eq!(fs::read_to_string(&corrupt).unwrap(), "not json at all");
+        let _ = fs::remove_file(&corrupt);
+
+        let other = scratch("other-name");
+        fs::write(&other, r#"{"usajobs_api_key":"keep"}"#).unwrap();
+        remove_from_secrets_file(&other, "anthropic_api_key");
+        assert!(fs::read_to_string(&other).unwrap().contains("keep"));
+        let _ = fs::remove_file(&other);
+    }
 
     /// Proves the app can actually store and retrieve a credential in the OS
     /// keychain on this machine. Ignored by default because it touches real
@@ -256,9 +359,6 @@ mod tests {
         entry.set_password("sk-ant-not-a-real-key").unwrap();
         assert_eq!(entry.get_password().unwrap(), "sk-ant-not-a-real-key");
         entry.delete_credential().unwrap();
-        assert!(matches!(
-            entry.get_password(),
-            Err(keyring::Error::NoEntry)
-        ));
+        assert!(matches!(entry.get_password(), Err(keyring::Error::NoEntry)));
     }
 }
