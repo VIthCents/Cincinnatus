@@ -236,7 +236,26 @@ export function ChatTab() {
         void runSearchNow(dispatch);
       },
     },
-    { label: "Make my resume better", run: () => setReviseMode(true) },
+    {
+      label: "Make my resume better",
+      // Checks before asking, like the other two. It used to open the "tell me
+      // what to change" prompt with no checks at all, so somebody with no key
+      // typed out a paragraph of instructions and only then learned the app
+      // could not do it.
+      // Both conditions are exactly the ones handleReviseInstruction enforces,
+      // with its own words — asked before the person writes, not after.
+      run: () =>
+        void (async () => {
+          if ((await needLlm()) === null) return;
+          if (state.resume === null) {
+            say(
+              "I need your resume first. Use “Look over my resume” and I'll read it in.",
+            );
+            return;
+          }
+          setReviseMode(true);
+        })(),
+    },
   ];
 
   return (

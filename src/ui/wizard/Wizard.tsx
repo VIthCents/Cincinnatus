@@ -20,6 +20,7 @@ import {
   db,
   getLlm,
   hasAdzunaKeys,
+  hasUsaJobsKey,
   runSearch,
   validateAnthropicKey,
   validateUsaJobsKey,
@@ -126,16 +127,30 @@ export function Wizard() {
         {step === "ai_key" && (
           <AiKeyStep
             alreadyConnected={appKeys.anthropic}
-            onDone={(connected) => {
+            onDone={async (connected) => {
               setHaveAiKey(connected);
-              // Move on RIGHT AWAY — the slow part happens in the background.
-              setStep("usajobs");
               if (connected && resumeText !== null && resumeData === null) {
+                // Move on RIGHT AWAY — the slow part is the parse, and it
+                // happens in the background.
+                setStep("usajobs");
                 setParsing("working");
                 void parseInBackground(resumeText);
-              } else if (!connected && resumeText !== null) {
-                void repo.setSetting(db, "pending_resume_text", resumeText);
+                return;
               }
+              if (!connected && resumeText !== null) {
+                // This one is a local SQLite write of a few milliseconds, and
+                // the chat tab reads it back. Awaited so the value is there
+                // before anything can look, but inside try/finally: a failed
+                // write must not strand somebody on this step with no message
+                // and no way forward, which is the whole shape of the bug this
+                // step used to have on its other path.
+                try {
+                  await repo.setSetting(db, "pending_resume_text", resumeText);
+                } catch (err) {
+                  console.error(err);
+                }
+              }
+              setStep("usajobs");
             }}
           />
         )}
@@ -152,7 +167,12 @@ export function Wizard() {
                 type: "keys",
                 keys: {
                   anthropic: haveAiKey || appKeys.anthropic,
-                  usajobs: (await repo.getSetting(db, "usajobs_connected")) === "1",
+                  // Derived from the stored secret, not from a settings flag
+                  // that only this wizard ever wrote. The flag was a second
+                  // source of truth for the same fact, and Settings never
+                  // updated it — connect a key there and the wizard's view of
+                  // it was simply wrong.
+                  usajobs: await hasUsaJobsKey(),
                   // The wizard never asks for Adzuna; read reality so this
                   // dispatch does not clobber what boot() found.
                   adzuna: await hasAdzunaKeys(),
@@ -169,6 +189,18 @@ export function Wizard() {
     </main>
   );
 }
+
+/**
+ * A key that works but will not save. Rare, and worth its own words: the
+ * person has done everything right, so the message must not sound like their
+ * key was rejected, and it has to point at the way out — Skip is on this same
+ * screen and Settings will take the key later.
+ */
+const KEY_SAVE_FAILED =
+  "The key works, but Cincinnatus could not save it on this computer. Try again. If it keeps failing, skip for now — you can add the key later in Settings.";
+
+const USAJOBS_SAVE_FAILED =
+  "The key works, but Cincinnatus could not save it on this computer. Try again, or skip for now and add it later in Settings.";
 
 const STEP_ORDER: readonly Step[] = [
   "welcome",
@@ -339,14 +371,26 @@ function AiKeyStep({
     setChecking(true);
     setResult(null);
     const outcome = await validateAnthropicKey(key.trim());
-    if (outcome.ok) {
-      await setSecret(SECRET_ANTHROPIC_KEY, key.trim());
-      setChecking(false);
-      onDone(true);
-    } else {
+    if (!outcome.ok) {
       setChecking(false);
       setResult({ ok: false, message: outcome.message });
+      return;
     }
+    // setChecking(false) used to live after this await and inside the success
+    // branch, so a keychain that refused to write left `checking` true forever:
+    // the button stayed disabled reading "Checking the key...", nothing was
+    // said, and the first-run wizard became a dead end on the person's very
+    // first attempt to use the app.
+    try {
+      await setSecret(SECRET_ANTHROPIC_KEY, key.trim());
+    } catch (err) {
+      console.error(err);
+      setChecking(false);
+      setResult({ ok: false, message: KEY_SAVE_FAILED });
+      return;
+    }
+    setChecking(false);
+    onDone(true);
   }
 
   if (alreadyConnected) {
@@ -426,14 +470,24 @@ function UsaJobsStep({ onDone }: { onDone: () => void }) {
     setResult(null);
     const outcome = await validateUsaJobsKey(key.trim(), email.trim());
     setChecking(false);
-    if (outcome.ok) {
+    if (!outcome.ok) {
+      setResult({ ok: false, message: outcome.message });
+      return;
+    }
+    // No hang here, because setChecking(false) is already above — but the
+    // writes were still uncaught inside a void-ed handler, so a keychain
+    // failure moved the person on as if their key had been saved. The
+    // `usajobs_connected` setting is gone: the stored secret is the one source
+    // of truth for whether federal jobs are on.
+    try {
       await setSecret(SECRET_USAJOBS_KEY, key.trim());
       await setSecret(SECRET_USAJOBS_EMAIL, email.trim());
-      await repo.setSetting(db, "usajobs_connected", "1");
-      onDone();
-    } else {
-      setResult({ ok: false, message: outcome.message });
+    } catch (err) {
+      console.error(err);
+      setResult({ ok: false, message: USAJOBS_SAVE_FAILED });
+      return;
     }
+    onDone();
   }
 
   return (

@@ -32,9 +32,9 @@ import { useAppDispatch, useAppState } from "../app/state.tsx";
 import { Icon } from "../components/Icon.tsx";
 import {
   Banner,
+  Button,
   Disclosure,
   PrimaryButton,
-  QuietButton,
   SelectField,
   SettingsRow,
   TextField,
@@ -42,9 +42,38 @@ import {
 
 /**
  * Settings (SPEC §8): one simple page. Key boxes with live checks, the search
- * schedule, and the plain-language AI spend estimate. Watchlist editing and
- * optional sources arrive with Phase 4 under an Advanced fold.
+ * schedule, and the plain-language AI spend estimate.
+ *
+ * Optional sources are here (USAJobs, Adzuna). Watchlist editing is not built:
+ * SPEC §8 puts it under an Advanced fold, and adding or removing a board needs
+ * paste-time validation to be usable at all — a wrong slug has to fail in front
+ * of the person, the way every key box here does, not silently return nothing
+ * on the next search. Recorded in DECISIONS.md rather than left as a promise.
  */
+
+/**
+ * What went wrong when saving or removing a key, in plain words.
+ *
+ * Every one of these paths used to fail silently: an unguarded `await` inside a
+ * `void`-ed handler, or a `.then()` with no rejection branch. A keychain that
+ * refused to write produced no banner, no error, no spinner — the key stayed in
+ * the box and nothing at all happened, which is indistinguishable from not
+ * having pressed the button.
+ */
+const SAVE_FAILED =
+  "The key checks out, but Cincinnatus could not save it on this computer. Try again in a moment.";
+const REMOVE_FAILED = "Cincinnatus could not remove the key. Try again in a moment.";
+const REMOVE_NUMBERS_FAILED =
+  "Cincinnatus could not remove the numbers. Try again in a moment.";
+
+function Trouble({ text }: { text: string | null }) {
+  if (text === null) return null;
+  return (
+    <Banner tone="caution" title="That did not work.">
+      {text}
+    </Banner>
+  );
+}
 
 export function SettingsTab() {
   const state = useAppState();
@@ -89,7 +118,8 @@ export function SettingsTab() {
             <Icon name="payments" size={22} />
             <span>
               AI used this month: <b>{spend}</b>. This is a rough count kept on your
-              computer — the exact bill lives in your Claude Console account.
+              computer — the exact bill is in the account where you made your key, at
+              console.anthropic.com.
             </span>
           </p>
         )}
@@ -194,20 +224,28 @@ function AiKeySection({
   const [key, setKey] = useState("");
   const [checking, setChecking] = useState(false);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const [trouble, setTrouble] = useState<string | null>(null);
 
   async function saveKey() {
     setChecking(true);
     setMessage(null);
+    setTrouble(null);
     const outcome = await validateAnthropicKey(key.trim());
     setChecking(false);
-    if (outcome.ok) {
-      await setSecret(SECRET_ANTHROPIC_KEY, key.trim());
-      setMessage({ ok: true, text: "✓ The key works and is saved." });
-      setKey("");
-      onChanged(true);
-    } else {
+    if (!outcome.ok) {
       setMessage({ ok: false, text: outcome.message });
+      return;
     }
+    try {
+      await setSecret(SECRET_ANTHROPIC_KEY, key.trim());
+    } catch (err) {
+      console.error(err);
+      setTrouble(SAVE_FAILED);
+      return;
+    }
+    setMessage({ ok: true, text: "✓ The key works and is saved." });
+    setKey("");
+    onChanged(true);
   }
 
   return (
@@ -241,6 +279,7 @@ function AiKeySection({
         {...(message !== null && !message.ok ? { error: message.text } : {})}
       />
       {message !== null && message.ok && <Banner tone="success">{message.text}</Banner>}
+      <Trouble text={trouble} />
       <div className="row">
         <PrimaryButton
           icon="key"
@@ -251,16 +290,25 @@ function AiKeySection({
           {checking ? "Checking" : "Save my key and continue"}
         </PrimaryButton>
         {connected && (
-          <QuietButton
+          <Button
+            variant="destructive"
+            size="md"
             onClick={() => {
-              void setSecret(SECRET_ANTHROPIC_KEY, "").then(() => {
-                setMessage({ ok: true, text: "The key was removed." });
-                onChanged(false);
-              });
+              setTrouble(null);
+              void setSecret(SECRET_ANTHROPIC_KEY, "").then(
+                () => {
+                  setMessage({ ok: true, text: "The key was removed." });
+                  onChanged(false);
+                },
+                (err: unknown) => {
+                  console.error(err);
+                  setTrouble(REMOVE_FAILED);
+                },
+              );
             }}
           >
             Remove the key
-          </QuietButton>
+          </Button>
         )}
       </div>
     </div>
@@ -278,22 +326,30 @@ function UsaJobsSection({
   const [email, setEmail] = useState("");
   const [checking, setChecking] = useState(false);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const [trouble, setTrouble] = useState<string | null>(null);
 
   async function saveKey() {
     setChecking(true);
     setMessage(null);
+    setTrouble(null);
     const outcome = await validateUsaJobsKey(key.trim(), email.trim());
     setChecking(false);
-    if (outcome.ok) {
+    if (!outcome.ok) {
+      setMessage({ ok: false, text: outcome.message });
+      return;
+    }
+    try {
       await setSecret(SECRET_USAJOBS_KEY, key.trim());
       await setSecret(SECRET_USAJOBS_EMAIL, email.trim());
-      setMessage({ ok: true, text: "✓ Federal jobs are on." });
-      setKey("");
-      setEmail("");
-      onChanged(true);
-    } else {
-      setMessage({ ok: false, text: outcome.message });
+    } catch (err) {
+      console.error(err);
+      setTrouble(SAVE_FAILED);
+      return;
     }
+    setMessage({ ok: true, text: "✓ Federal jobs are on." });
+    setKey("");
+    setEmail("");
+    onChanged(true);
   }
 
   return (
@@ -332,6 +388,7 @@ function UsaJobsSection({
         spellCheck={false}
       />
       {message !== null && message.ok && <Banner tone="success">{message.text}</Banner>}
+      <Trouble text={trouble} />
       <div className="row">
         <PrimaryButton
           icon="key"
@@ -341,6 +398,35 @@ function UsaJobsSection({
         >
           {checking ? "Checking" : "Save my key and continue"}
         </PrimaryButton>
+        {/* The AI key and Adzuna both offered removal and this did not, so a
+            wrong key here could not be undone from the interface at all. */}
+        {connected && (
+          <Button
+            variant="destructive"
+            size="md"
+            onClick={() => {
+              setTrouble(null);
+              void Promise.all([
+                setSecret(SECRET_USAJOBS_KEY, ""),
+                setSecret(SECRET_USAJOBS_EMAIL, ""),
+              ]).then(
+                () => {
+                  setMessage({
+                    ok: true,
+                    text: "The key was removed. Federal jobs are off.",
+                  });
+                  onChanged(false);
+                },
+                (err: unknown) => {
+                  console.error(err);
+                  setTrouble(REMOVE_FAILED);
+                },
+              );
+            }}
+          >
+            Remove the key
+          </Button>
+        )}
       </div>
     </div>
   );
@@ -371,6 +457,7 @@ function AdzunaSection({
   const [checking, setChecking] = useState(false);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [quotaNote, setQuotaNote] = useState<string | null>(null);
+  const [trouble, setTrouble] = useState<string | null>(null);
 
   useEffect(() => {
     // Adzuna has a daily and monthly ceiling. On a day the ledger is spent,
@@ -395,21 +482,28 @@ function AdzunaSection({
   async function save() {
     setChecking(true);
     setMessage(null);
+    setTrouble(null);
     const outcome = await validateAdzunaKeys(appId.trim(), appKey.trim());
     setChecking(false);
-    if (outcome.ok) {
+    if (!outcome.ok) {
+      setMessage({ ok: false, text: outcome.message });
+      return;
+    }
+    try {
       await setSecret(SECRET_ADZUNA_APP_ID, appId.trim());
       await setSecret(SECRET_ADZUNA_APP_KEY, appKey.trim());
-      setMessage({
-        ok: true,
-        text: "That worked. You will see more jobs from now on.",
-      });
-      setAppId("");
-      setAppKey("");
-      onChanged(true);
-    } else {
-      setMessage({ ok: false, text: outcome.message });
+    } catch (err) {
+      console.error(err);
+      setTrouble(SAVE_FAILED);
+      return;
     }
+    setMessage({
+      ok: true,
+      text: "That worked. You will see more jobs from now on.",
+    });
+    setAppId("");
+    setAppKey("");
+    onChanged(true);
   }
 
   return (
@@ -485,6 +579,7 @@ function AdzunaSection({
         {...(message !== null && !message.ok ? { error: message.text } : {})}
       />
       {message !== null && message.ok && <Banner tone="success">{message.text}</Banner>}
+      <Trouble text={trouble} />
       <div className="row">
         <PrimaryButton
           icon="key"
@@ -495,19 +590,28 @@ function AdzunaSection({
           {checking ? "Checking" : "Save and turn on more jobs"}
         </PrimaryButton>
         {connected && (
-          <QuietButton
+          <Button
+            variant="destructive"
+            size="md"
             onClick={() => {
+              setTrouble(null);
               void Promise.all([
                 setSecret(SECRET_ADZUNA_APP_ID, ""),
                 setSecret(SECRET_ADZUNA_APP_KEY, ""),
-              ]).then(() => {
-                setMessage({ ok: true, text: "The numbers were removed." });
-                onChanged(false);
-              });
+              ]).then(
+                () => {
+                  setMessage({ ok: true, text: "The numbers were removed." });
+                  onChanged(false);
+                },
+                (err: unknown) => {
+                  console.error(err);
+                  setTrouble(REMOVE_NUMBERS_FAILED);
+                },
+              );
             }}
           >
             Remove these numbers
-          </QuietButton>
+          </Button>
         )}
       </div>
       <p className="prose--muted">
