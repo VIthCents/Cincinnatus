@@ -13,6 +13,7 @@ import { getMonthSpend, recordSpend, spendInWords } from "../src/core/app/spend.
 import { chatTurn } from "../src/core/chat/agent.ts";
 import { CHAT_SYSTEM } from "../src/core/chat/prompts/chat.v1.ts";
 import { loadRankedFromDb } from "../src/core/pipeline/loadRanked.ts";
+import { AGGREGATOR_STALE_DAYS } from "../src/core/config.ts";
 import { encodeVector } from "../src/core/util/base64.ts";
 import { nodeHasher } from "../src/node/clock.ts";
 import type { Job, Profile } from "../src/core/types.ts";
@@ -328,6 +329,58 @@ describe("loadRankedFromDb", () => {
     expect(ranked.length).toBe(2);
     expect(ranked[0]!.job.id).toBe(jobA.id);
     expect(ranked[0]!.fitScore).toBeGreaterThan(ranked[1]!.fitScore);
+
+    db.close();
+  });
+
+  /**
+   * The app-open list and the post-search list must be the same list. They read
+   * the same table through the same function, but this path used to call it
+   * without `now`, so the aggregator staleness cutoff never applied here: a
+   * month-old Adzuna listing showed on launch and then disappeared the instant a
+   * search ran. A dead link the app served itself is the fastest way to teach
+   * someone the list cannot be trusted.
+   */
+  it("applies the same staleness cutoff the search path applies", async () => {
+    const db = new NodeDb(":memory:");
+    await migrate(db, NOW);
+
+    const day = 24 * 60 * 60 * 1000;
+    const longAgo = NOW - (AGGREGATOR_STALE_DAYS + 10) * day;
+
+    const staleAd = {
+      ...makeJob(nodeHasher.sha256Hex("stale"), "Driver", longAgo, "hs"),
+      source: "adzuna" as const,
+      lastSeenAt: longAgo,
+    };
+    // Same age, but an employer's own board — fetched whole every run, so a
+    // filled job stops arriving on its own and never needs this cutoff.
+    const oldBoardJob = {
+      ...makeJob(nodeHasher.sha256Hex("board"), "Dispatcher", longAgo, "hb"),
+      lastSeenAt: longAgo,
+    };
+    await repo.upsertJobs(db, [staleAd, oldBoardJob]);
+
+    await repo.saveEmbeddings(db, MODEL, 2, NOW, [
+      ["hash-s", encodeVector(new Float32Array([1, 0]))],
+      ["hash-b", encodeVector(new Float32Array([1, 0]))],
+    ]);
+    await repo.setEmbedHashes(db, [
+      [staleAd.id, "hash-s"],
+      [oldBoardJob.id, "hash-b"],
+    ]);
+    await repo.saveProfile(
+      db,
+      profile,
+      NOW,
+      encodeVector(new Float32Array([1, 0])),
+      MODEL,
+    );
+
+    const loaded = await loadRankedFromDb(db, MODEL, NOW);
+    const ids = loaded!.ranked.ranked.map((r) => r.job.id);
+    expect(ids).toContain(oldBoardJob.id);
+    expect(ids).not.toContain(staleAd.id);
 
     db.close();
   });

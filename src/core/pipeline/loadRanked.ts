@@ -24,7 +24,12 @@ export async function loadRankedFromDb(
   const profile = await repo.getStoredProfile(db);
   if (profile === null) return null;
 
-  const jobs = await repo.listRankableJobs(db);
+  // `now` matters: it applies the same aggregator-staleness cutoff the search
+  // path applies (run.ts passes its own start time). Without it this path
+  // returned month-old Adzuna listings that silently vanished the moment a
+  // search ran — the same list, two different answers, depending only on
+  // whether the app had searched since it opened.
+  const jobs = await repo.listRankableJobs(db, now);
   if (jobs.length === 0) return null;
 
   const hashOf = await repo.listEmbedHashes(db);
