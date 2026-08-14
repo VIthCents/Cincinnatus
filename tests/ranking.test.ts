@@ -7,7 +7,12 @@ import {
 } from "../src/core/pipeline/score.ts";
 import { assignCanonicals } from "../src/core/pipeline/dedupe.ts";
 import { isWithinReach, rankJobs } from "../src/core/pipeline/rank.ts";
-import { FRESHNESS_FLOOR, MAX_AGE_DAYS } from "../src/core/config.ts";
+import {
+  FRESHNESS_FLOOR,
+  MAX_AGE_DAYS,
+  MIN_FIT_FOR_WIDENING,
+} from "../src/core/config.ts";
+import { GOOD_MATCH_FIT, STRONG_MATCH_FIT } from "../src/core/pipeline/match.ts";
 import type { Job, Profile } from "../src/core/types.ts";
 
 const DAY = 86_400_000;
@@ -111,14 +116,38 @@ describe("the blend", () => {
   });
 
   /**
-   * The guarantee the floor exists to provide: age's total authority is capped
-   * at 1/FRESHNESS_FLOOR, so a job the badge calls a strong match can never be
-   * outranked by one the badge calls merely good, however old it is.
+   * The guarantee the floor exists to provide: a job sitting exactly on the
+   * strong band, at any age, still scores at or above the good band. Age
+   * reorders inside a band; it never carries a job across one.
+   *
+   * Written against the band constants rather than the numbers they hold today.
+   * The literals here used to be 55 and 40, and stayed 55 and 40 after the
+   * bands were re-measured to 60 and 48 — the assertion kept passing and
+   * stopped meaning anything, which is how the floor came to be wrong.
+   *
+   * The margin is thin on purpose: freshness never quite reaches the floor,
+   * because MAX_AGE_DAYS clamps the decay short of it. That is what makes this
+   * a strict inequality rather than an equality.
    */
   it("never lets age overturn a badge-level difference in fit", () => {
     const oldest = freshnessFactor(MAX_AGE_DAYS);
-    expect(blend(55, oldest)).toBeGreaterThan(blend(40, freshnessFactor(0)));
+    expect(blend(STRONG_MATCH_FIT, oldest)).toBeGreaterThan(
+      blend(GOOD_MATCH_FIT, freshnessFactor(0)),
+    );
     expect(oldest).toBeGreaterThanOrEqual(FRESHNESS_FLOOR);
+  });
+
+  /**
+   * The invariant behind the number, so the floor cannot silently fall out of
+   * step with the bands again: whatever the bands become, the floor must be at
+   * least their ratio.
+   */
+  it("keeps the floor at or above the ratio of the badge bands", () => {
+    expect(FRESHNESS_FLOOR).toBeGreaterThanOrEqual(GOOD_MATCH_FIT / STRONG_MATCH_FIT);
+  });
+
+  it("asks the same question for widening that the badge answers", () => {
+    expect(MIN_FIT_FOR_WIDENING).toBe(GOOD_MATCH_FIT);
   });
 });
 

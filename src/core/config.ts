@@ -2,30 +2,50 @@
  * Tuning constants. One file, so a behaviour change is one diff and one review.
  */
 
+import { GOOD_MATCH_FIT, STRONG_MATCH_FIT } from "./pipeline/match.ts";
+
 /**
  * Freshness half-life, in days, for the decaying part of the freshness factor.
  *
- * This is a true half-life now: `2 ** (-age / N)`. The old code wrote
+ * This is a true half-life: `2 ** (-age / N)`. The old code wrote
  * `exp(-age / 7)` under this name, which is a time CONSTANT of 7 days — an
  * actual half-life of 4.85 days, and a name that disagreed with its own maths.
+ *
+ * 10 rather than 14, measured 2026-08-14 when FRESHNESS_FLOOR moved to 0.80.
+ * A higher floor leaves the decaying part less amplitude, and at a 14-day
+ * half-life that was enough to let one job back into the infantry top ten: the
+ * 16-day-old "Security Officer" scoring 70.4 that every judge marked out of
+ * reach — the encoder mislabel documented in pipeline/match.ts. NDCG@10 on that
+ * golden set fell to 0.653, under its 0.70 floor. At 10 days it decays past
+ * rank 10 and the set returns to 0.745, with the CDL set unchanged at 0.565.
+ *
+ * 12 and 7 also pass; 10 was the best of the values tried, not a forced choice.
  */
-export const FRESHNESS_HALF_LIFE_DAYS = 14;
+export const FRESHNESS_HALF_LIFE_DAYS = 10;
 
 /**
  * The least a job's fit can be discounted for age, however old it is.
  *
- * Derived, not taste. The badge bands are 40 (good) and 55 (strong), so for the
- * guarantee "a job the badge calls strong is never outranked by a job the badge
- * calls good, at any age" the floor must be at least 40/55 = 0.727. 0.75 is that
- * rounded up, and it caps age's total authority at 1.333x.
+ * Derived, not taste, from the badge bands in pipeline/match.ts — which are the
+ * single source of those numbers, and which moved to 48/60 on 2026-08-10 while
+ * this constant was left behind at a value derived from the old 40/55.
  *
- * Measured 2026-08-09, this is why: the corpus has a median age of 54 days and
- * 90% of it is over a week old, so the unbounded `exp(-age/7)` was not a
- * tiebreak, it was a hard filter down to the newest ~10% — Spearman correlation
- * of final score with age was 0.99, with fit 0.15. The single best semantic
- * match in a 5,293-job corpus sat at final-rank 1,921 for no reason but its date.
+ * The guarantee is: a job sitting exactly on the strong band, at any age, still
+ * scores at or above the good band — age can cost a job its place in the order,
+ * but never drops a strong match below what the interface calls a good one.
+ * That needs the floor to be at least GOOD/STRONG = 48/60 = 0.80, and caps
+ * age's total authority at 1.25x. Note what it does NOT say: a fresh fit-59
+ * "good" job still outranks a maximally aged fit-60 "strong" one. Ordering
+ * inside a band is age's job. The floor only stops age crossing a band.
+ *
+ * Measured 2026-08-09, why a floor exists at all: the corpus has a median age
+ * of 54 days and 90% of it is over a week old, so the unbounded `exp(-age/7)`
+ * was not a tiebreak, it was a hard filter down to the newest ~10% — Spearman
+ * correlation of final score with age was 0.99, with fit 0.15. The single best
+ * semantic match in a 5,293-job corpus sat at final-rank 1,921 for no reason
+ * but its date.
  */
-export const FRESHNESS_FLOOR = 0.75;
+export const FRESHNESS_FLOOR = GOOD_MATCH_FIT / STRONG_MATCH_FIT;
 
 /**
  * Age is clamped into this range before the decay is applied.
@@ -56,15 +76,6 @@ export const EMBED_MAX_TOKENS = 256;
 export const EMBED_BATCH_SIZE = 32;
 
 /**
- * If filtering to the user's radius leaves fewer than this many jobs, the
- * filter is dropped and the run reports nationwide results instead.
- *
- * The reachable employer boards skew heavily coastal, so a user near Fort Bragg
- * or San Antonio can legitimately have almost nothing commutable. An empty list
- * reads as a broken app; a long list of unreachable jobs reads as a useless one.
- * Widening and saying so is the honest middle.
- */
-/**
  * How far a degree-gated role is pushed down for someone with no degree, in
  * cosine units. 0.15 against a corpus whose cosines span roughly 0.0-0.63, so
  * it demotes without erasing: a gated job that is still far and away the best
@@ -80,18 +91,29 @@ export const CREDENTIAL_GATE_PENALTY = 0.15;
  */
 export const TITLE_AFFINITY_BONUS = 0.1;
 
+/**
+ * If filtering to the user's radius leaves fewer than this many jobs worth
+ * applying to, the filter is dropped and the run reports nationwide results
+ * instead.
+ *
+ * The reachable employer boards skew heavily coastal, so a user near Fort Bragg
+ * or San Antonio can legitimately have almost nothing commutable. An empty list
+ * reads as a broken app; a long list of unreachable jobs reads as a useless one.
+ * Widening and saying so is the honest middle.
+ */
 export const MIN_RESULTS_BEFORE_WIDENING = 10;
 
 /**
  * The fit a nearby job needs before it counts toward "there is enough here".
  *
  * Widening asks how many jobs nearby are worth applying to, not how many are
- * nearby — see rank.ts. Set at the "good match" badge band, so the question the
- * code asks is the same one the interface answers: are there ten jobs near this
- * person that Cincinnatus would call a good match? Measured 2026-08-09, a CDL
- * driver in Fayetteville NC had 318 nearby jobs and none of them was one.
+ * nearby — see rank.ts. This IS the "good match" badge band, by construction
+ * rather than by a copied number, so the question the code asks is the same one
+ * the interface answers: are there ten jobs near this person that Cincinnatus
+ * would call a good match? Measured 2026-08-09, a CDL driver in Fayetteville NC
+ * had 318 nearby jobs and none of them was one.
  */
-export const MIN_FIT_FOR_WIDENING = 40;
+export const MIN_FIT_FOR_WIDENING = GOOD_MATCH_FIT;
 
 /** Default number of days of USAJobs postings to request. */
 export const USAJOBS_DEFAULT_WINDOW_DAYS = 7;
@@ -132,12 +154,6 @@ export const REQUEST_TIMEOUT_MS = 30_000;
  */
 // TODO(identity): update if the repository moves.
 export const USER_AGENT = "Cincinnatus/0.1 (+https://github.com/VIthCents/Cincinnatus)";
-
-/**
- * Titles below this token-overlap score with the profile are dropped before
- * ranking. Deliberately low: this only removes the obviously irrelevant.
- */
-export const MIN_TITLE_OVERLAP = 0;
 
 // -----------------------------------------------------------------------------
 // AI models (SPEC §2: two constants in one config file)

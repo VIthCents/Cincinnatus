@@ -133,7 +133,11 @@ export interface RankedJob {
   readonly fitScore: number;
   /** Whole days between postedAt (or firstSeenAt) and the run's `now`. */
   readonly ageDays: number;
-  /** exp(-ageDays / FRESHNESS_HALF_LIFE_DAYS). */
+  /**
+   * FRESHNESS_FLOOR + (1 - FRESHNESS_FLOOR) * 2 ** (-ageDays / half-life).
+   * Floored, so age can reorder within a badge band but never across one —
+   * see pipeline/score.ts and the FRESHNESS_FLOOR docblock.
+   */
   readonly freshness: number;
   /** fitScore * freshness. The single number the list is ordered by. */
   readonly finalScore: number;

@@ -1349,3 +1349,65 @@ releases, for the different reason given in RELEASING.md.
 `bundle.licenseFile` is deliberately not set. On NSIS it inserts a license page the person must
 click through, and MIT requires no such acceptance; one more screen between this audience and a
 working app is a real cost for no legal benefit.
+
+---
+
+## 2026-08-14 — The freshness floor follows the badge bands, and now cannot drift from them
+
+**Context.** On 2026-08-09 `FRESHNESS_FLOOR` was derived from the badge bands, which were then 40
+(good) and 55 (strong): the floor has to be at least good/strong, or age can push a job the
+interface calls a strong match below one it calls merely good. 40/55 = 0.727, rounded up to 0.75.
+
+On 2026-08-10 the bands were re-measured against 88 labelled jobs and moved to 48 and 60. The floor
+did not move with them, and neither did `MIN_FIT_FOR_WIDENING`, whose comment said it "is set at the
+good match badge band" while holding 40 against a band of 48. Both were copied numbers, and copied
+numbers are how two things that must agree stop agreeing — the same failure `pipeline/match.ts` was
+created to end when the bands themselves lived in two files.
+
+At 0.75 the stated guarantee was simply false: a job at fit 60, at maximum age, scores 45.0, and any
+fresh job at 46 to 47.9 — a _fair_ match, below the good band — outranks it.
+
+**Decision.** Both constants are now derived, not written:
+
+```ts
+export const FRESHNESS_FLOOR = GOOD_MATCH_FIT / STRONG_MATCH_FIT; // 0.80
+export const MIN_FIT_FOR_WIDENING = GOOD_MATCH_FIT; // 48
+```
+
+`pipeline/match.ts` imports nothing, so `config.ts` importing it is acyclic. A retune of the bands
+now moves everything that depends on them in the same commit.
+
+`FRESHNESS_HALF_LIFE_DAYS` moves 14 → 10, which is not cosmetic and was not free. Measured against
+both golden sets (`fixtures/rank-eval/`), NDCG@10:
+
+| floor | half-life | CDL (floor 0.55) | infantry (floor 0.70) |
+| ----- | --------- | ---------------- | --------------------- |
+| 0.75  | 14        | 0.5605           | 0.7452                |
+| 0.80  | 14        | 0.5651           | **0.6529 — FAILS**    |
+| 0.80  | 12        | 0.5651           | 0.7429                |
+| 0.80  | 10        | 0.5651           | **0.7452**            |
+| 0.80  | 7         | 0.5651           | 0.7266                |
+
+Raising the floor leaves the decaying part of freshness less amplitude, and at a 14-day half-life
+that was enough to readmit one job to the infantry top ten: the 16-day-old "Security Officer"
+scoring 70.4 that all three judges marked out of reach — the encoder mislabel already documented in
+`match.ts`. 10 is the best of the values tried, not a forced choice; 12 and 7 also clear the gates.
+
+**Consequence.** Age's total authority is capped at 1.25x rather than 1.333x. The guarantee is now
+stated precisely in the code, because the old wording overclaimed: a job on the strong band, at any
+age, still scores at or above the good band. It does **not** say a strong match always outranks a
+good one — a fresh fit-59 job still beats a maximally aged fit-60 job. Age reorders within a band;
+it never carries a job across one.
+
+Two tests now hold this in place. One asserts the invariant itself
+(`FRESHNESS_FLOOR >= GOOD_MATCH_FIT / STRONG_MATCH_FIT`), so any future band change that forgets the
+floor fails immediately. The other rewrites the badge-level test in terms of the band constants: its
+literals were 55 and 40, and they kept passing after the bands moved, which is precisely why the
+drift went unnoticed for four days.
+
+`MIN_TITLE_OVERLAP` is deleted. It documented a filter that drops titles below a token-overlap score,
+had no reader anywhere in the repo, and held the value 0 — a no-op even under its own description.
+Documented behaviour that does not exist is worse than no documentation.
+
+The NDCG floors are not ratcheted: 0.5651 against 0.55 is noise-level movement, not an improvement
+to lock in.

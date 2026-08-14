@@ -259,6 +259,10 @@ describe("what the match badge promises", () => {
     const cdl = load("cdl").map((c) =>
       fitFromSimilarity(reachAdjustedSimilarity(c.cosine, c.title, cdlProfile)),
     );
+    // `[].every()` is true, so without this the assertion below would pass
+    // loudest exactly when the fixture failed to load. The sibling tests guard
+    // the same way; this one was missed.
+    expect(cdl.length).toBeGreaterThanOrEqual(30);
     expect(cdl.every((f) => matchLevel(f) !== "strong")).toBe(true);
   });
 
