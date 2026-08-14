@@ -376,13 +376,20 @@ function AdzunaSection({
     // Adzuna has a daily and monthly ceiling. On a day the ledger is spent,
     // "More job listings are on" would be a lie — say what the harness says
     // instead: which limit was hit and when it comes back.
-    if (!connected) {
-      setQuotaNote(null);
-      return;
-    }
+    //
+    // Nothing is cleared here when disconnected: the note is rendered behind
+    // `connected` anyway, and clearing it synchronously inside the effect makes
+    // React re-render twice for a value nobody can see.
+    if (!connected) return;
+
+    let cancelled = false;
     void quotaStatus(db, "adzuna", ADZUNA_QUOTA, tauriClock.now()).then((quota) => {
+      if (cancelled) return;
       setQuotaNote(quota.exhausted === null ? null : quotaWords(quota.exhausted));
     });
+    return () => {
+      cancelled = true;
+    };
   }, [connected]);
 
   async function save() {
