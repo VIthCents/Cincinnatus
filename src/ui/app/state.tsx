@@ -48,6 +48,21 @@ export interface ChatEntry {
     | null;
 }
 
+/**
+ * What the Opportunities tab needs in order to explain the list it is showing:
+ * whether the search had to look beyond the person's area, how many jobs were
+ * genuinely nearby, and any plain-words notes about the run.
+ *
+ * A `RunReport` is assignable to this, which is what lets a finished search
+ * hand its whole report over unchanged while a cold start supplies the two
+ * facts it can recompute and an empty note list.
+ */
+export interface WidenSummary {
+  readonly widenedBeyondRadius: boolean;
+  readonly reachable: number;
+  readonly notes: readonly string[];
+}
+
 export interface AppState {
   readonly booted: boolean;
   /** Plain-words message when startup failed; "" while fine. */
@@ -58,7 +73,16 @@ export interface AppState {
   readonly profile: Profile | null;
   readonly keys: { anthropic: boolean; usajobs: boolean; adzuna: boolean };
   readonly ranked: readonly RankedJob[] | null;
-  readonly lastReport: RunReport | null;
+  /**
+   * What the list on screen needs explaining about itself.
+   *
+   * Narrower than a RunReport on purpose, because it must also be answerable
+   * after a restart, when there is no run to report — `loadRankedFromDb`
+   * recomputes widening against the current profile, which is a truer answer
+   * than replaying a stale run anyway. A full RunReport satisfies this shape,
+   * so `search_done` can keep handing one over.
+   */
+  readonly lastReport: WidenSummary | null;
   readonly searching: boolean;
   /** What the run is doing right now. Only meaningful while `searching`. */
   readonly progress: SearchProgress;
@@ -113,6 +137,7 @@ export type Action =
       profile: Profile | null;
       keys: { anthropic: boolean; usajobs: boolean; adzuna: boolean };
       ranked: readonly RankedJob[] | null;
+      lastReport: WidenSummary | null;
       hasSearched: boolean;
       adzunaNudgeDismissed: boolean;
       hidden: ReadonlySet<string>;
@@ -163,6 +188,7 @@ function reducer(state: AppState, action: Action): AppState {
         profile: action.profile,
         keys: action.keys,
         ranked: action.ranked,
+        lastReport: action.lastReport,
         hasSearched: action.hasSearched,
         adzunaNudgeDismissed: action.adzunaNudgeDismissed,
         hidden: action.hidden,
@@ -295,6 +321,7 @@ async function boot(dispatch: Dispatch<Action>): Promise<void> {
     baseResume === null ? null : (JSON.parse(baseResume.content) as ResumeData);
 
   let ranked: readonly RankedJob[] | null = null;
+  let lastReport: WidenSummary | null = null;
   // A completed run on record means the jobs are already read and stored, so
   // the next search is the fast kind. That is the whole basis for whether the
   // "first search is slow" advisory is true.
@@ -303,6 +330,15 @@ async function boot(dispatch: Dispatch<Action>): Promise<void> {
     const last = await loadLastRanking();
     if (last !== null) {
       ranked = last.ranked.ranked;
+      // Keep the explanation, not just the list. Without this the "looked
+      // further out" banner vanished on restart while the jobs it explains
+      // stayed — leaving rows marked "Outside your area" with nothing on
+      // screen saying why they were shown at all. No notes: there was no run.
+      lastReport = {
+        widenedBeyondRadius: last.ranked.widenedBeyondRadius,
+        reachable: last.ranked.reachable,
+        notes: [],
+      };
       hasSearched = true;
     }
   } catch {
@@ -348,6 +384,7 @@ async function boot(dispatch: Dispatch<Action>): Promise<void> {
     profile,
     keys: { anthropic, usajobs, adzuna },
     ranked,
+    lastReport,
     hasSearched,
     adzunaNudgeDismissed,
     hidden,

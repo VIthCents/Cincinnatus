@@ -111,6 +111,16 @@ export function OpportunitiesTab() {
         </Banner>
       )}
 
+      {/* A limit is not a snag, so this is info and not caution: nothing went
+          wrong, one source simply sat this run out and the list is shorter for
+          a reason the person deserves to know. */}
+      {!state.searching &&
+        (state.lastReport?.notes ?? []).map((note) => (
+          <Banner key={note} tone="info" title="One job site is resting.">
+            {note}
+          </Banner>
+        ))}
+
       {!state.searching && !state.keys.anthropic && state.ranked !== null && (
         <Banner
           tone="info"
@@ -121,12 +131,12 @@ export function OpportunitiesTab() {
               icon="key"
               onClick={() => dispatch({ type: "tab", tab: "settings" })}
             >
-              Connect the AI brain
+              Connect the AI helper
             </Button>
           }
         >
-          Connect the AI brain and it will also tell you why each job fits you, and
-          write your resume and cover letter for the ones you pick.
+          Connect the AI helper and it will write your resume and cover letter for the
+          jobs you pick.
         </Banner>
       )}
 
@@ -371,8 +381,11 @@ function JobCard({
 
   const salary = salaryWords(job);
   const aiConnected = state.keys.anthropic;
-  const why =
-    !aiConnected || state.profile === null ? null : whyWords(job, state.profile);
+  // Not gated on the AI key: whyWords is local string matching against the
+  // person's own skills and titles and costs nothing. Hiding it from keyless
+  // users withheld a free, honest feature and made the banner above — which
+  // used to advertise it as something the AI unlocks — untrue as well.
+  const why = state.profile === null ? null : whyWords(job, state.profile);
   // Restored across launches; one verdict per job; tapping again un-votes.
   const voted = state.feedback.get(job.id) ?? null;
 

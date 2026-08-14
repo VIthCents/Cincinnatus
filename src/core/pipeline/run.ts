@@ -28,6 +28,12 @@ export interface RunOptions {
    * output is indistinguishable from a hang.
    */
   readonly maxEmbed: number | null;
+  /**
+   * Plain-words notes about this run that the caller already knows and the
+   * pipeline cannot discover — chiefly a source left out because its daily
+   * limit is spent. Optional: most callers have nothing to say.
+   */
+  readonly notes?: readonly string[];
 }
 
 export interface RunResult {
@@ -233,6 +239,7 @@ export async function runPipeline(options: RunOptions): Promise<RunResult> {
     widenedBeyondRadius,
     candidates,
     reachable,
+    notes: options.notes ?? [],
   };
 
   await repo.saveRun(

@@ -279,6 +279,42 @@ describe("end to end over recorded fixtures", () => {
     }
   });
 
+  /**
+   * A source that sits out because its daily limit is spent is not an error,
+   * so it never appears in `sources` and the list is simply shorter. The note
+   * is the only thing that can explain that, and it has to survive into the
+   * saved run rather than flashing past in the progress line.
+   */
+  it("carries plain-words notes through to the report and the saved run", async () => {
+    const { http, sources } = stubbedSources();
+    const db = freshDb();
+    const note = "More job listings are resting until tomorrow.";
+
+    const { report } = await runPipeline({
+      db,
+      http,
+      clock: fakeClock(NOW),
+      hasher: fakeHasher,
+      embedder: createFakeEmbedder(),
+      reporter: () => {},
+      profile,
+      sources,
+      notes: [note],
+      maxEmbed: null,
+    });
+
+    expect(report.notes).toEqual([note]);
+
+    const saved = await db.all<{ report: string }>("SELECT report FROM runs");
+    expect(saved).toHaveLength(1);
+    expect(JSON.parse(saved[0]!.report).notes).toEqual([note]);
+  });
+
+  it("defaults notes to an empty list when the caller has nothing to say", async () => {
+    const { report } = await run();
+    expect(report.notes).toEqual([]);
+  });
+
   it("embeds identical text only once", async () => {
     const { report } = await run();
     // Content-addressed embeddings: the number embedded can never exceed the

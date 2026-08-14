@@ -1,5 +1,5 @@
 import { TauriDb } from "../../tauri/db.ts";
-import { quotaStatus } from "../../core/app/quota.ts";
+import { quotaStatus, quotaWords } from "../../core/app/quota.ts";
 import { ADZUNA_QUOTA } from "../../core/config.ts";
 import { tauriHttp } from "../../tauri/http.ts";
 import { tauriClock, tauriHasher } from "../../tauri/clock.ts";
@@ -169,11 +169,14 @@ async function termsFor(profile: Profile) {
   return buildSearchTerms(profile, { promoted, demoted });
 }
 
-async function buildSources(profile: Profile): Promise<Source[]> {
+async function buildSources(
+  profile: Profile,
+): Promise<{ sources: Source[]; notes: string[] }> {
   const watchlist = await repo.listWatchlist(db);
   const sources: Source[] = watchlist
     .map(sourceForBoard)
     .filter((source): source is Source => source !== null);
+  const notes: string[] = [];
 
   const key = await getSecret(SECRET_USAJOBS_KEY);
   const email = await getSecret(SECRET_USAJOBS_EMAIL);
@@ -205,10 +208,15 @@ async function buildSources(profile: Profile): Promise<Source[]> {
           maxCalls: quota.remaining,
         }),
       );
+    } else if (quota.exhausted !== null) {
+      // Say so. quotaWords exists precisely for this and was only ever shown
+      // in Settings, so the person watching the Jobs tab got a shorter list
+      // with no explanation anywhere on the screen they were looking at.
+      notes.push(quotaWords(quota.exhausted));
     }
   }
 
-  return sources;
+  return { sources, notes };
 }
 
 export async function runSearch(
@@ -216,7 +224,7 @@ export async function runSearch(
   reporter: Reporter,
 ): Promise<RunResult> {
   const embedder = await getEmbedder();
-  const sources = await buildSources(profile);
+  const { sources, notes } = await buildSources(profile);
 
   const result = await runPipeline({
     db,
@@ -227,6 +235,7 @@ export async function runSearch(
     reporter,
     profile,
     sources,
+    notes,
     maxEmbed: null, // the product default: embed everything, show progress
   });
 

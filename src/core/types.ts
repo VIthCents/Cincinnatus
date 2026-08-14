@@ -218,4 +218,15 @@ export interface RunReport {
   readonly candidates: number;
   /** How many of those were within the user's reach or remote. */
   readonly reachable: number;
+  /**
+   * Plain-words things worth telling the person about this run that no source
+   * reported, because they are not failures. A source deliberately sat out —
+   * Adzuna's daily limit is spent — belongs here: the list is quietly shorter
+   * and nothing else on screen would ever explain why.
+   *
+   * Distinct from `SourceOutcome.error`, which is a source that tried and hit
+   * trouble. A limit is not a snag, and dressing one up as the other teaches
+   * people to distrust a working app.
+   */
+  readonly notes: readonly string[];
 }
