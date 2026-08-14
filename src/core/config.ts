@@ -188,6 +188,38 @@ export const DOC_MODEL = "claude-sonnet-5";
 /** Chat and match scoring: cheap, fast, good enough for short judgments. */
 export const FAST_MODEL = "claude-haiku-4-5";
 
+// -----------------------------------------------------------------------------
+// LLM match scoring (SPEC §5, §7 task 6)
+// -----------------------------------------------------------------------------
+
+/**
+ * How many jobs one search may ask the AI to judge.
+ *
+ * SPEC §5 says "the top ~30 new jobs". Enough to cover what a person actually
+ * reads before deciding, and small enough that a full pass costs about two
+ * cents of their own credits. Steady-state runs score far fewer, because a job
+ * already judged for this profile is not judged again.
+ */
+export const LLM_SCORE_MAX_JOBS = 30;
+
+/**
+ * Jobs per request. Ten keeps a single call's output near 500 tokens and means
+ * a malformed or refused batch costs at most ten scores rather than thirty.
+ */
+export const LLM_SCORE_BATCH_SIZE = 10;
+
+/**
+ * Characters of each job's description sent for judging. Enough for the duties
+ * and the requirements, which is what the rubric turns on; the rest is usually
+ * benefits boilerplate and equal-opportunity text.
+ */
+export const LLM_SCORE_DESCRIPTION_CHARS = 1200;
+
+export const LLM_SCORE_MAX_TOKENS = 1500;
+
+/** SPEC §7: "score + rationale <= 140 chars". Enforced in code, not just asked for. */
+export const LLM_RATIONALE_MAX_CHARS = 140;
+
 /**
  * List prices in USD per million tokens, for the plain-language running cost
  * estimate ("AI used this month: about $1.20"). Estimates only — billing truth

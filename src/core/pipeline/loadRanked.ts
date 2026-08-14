@@ -1,8 +1,9 @@
-import type { Db } from "../ports.ts";
-import type { Profile } from "../types.ts";
+import type { Db, Hasher } from "../ports.ts";
+import type { LlmScore, Profile } from "../types.ts";
 import * as repo from "../db/repo.ts";
 import { decodeVector } from "../util/base64.ts";
 import { rankJobs, type RankOutput } from "./rank.ts";
+import { profileScoreHash } from "./llmScore.ts";
 
 /**
  * Re-rank straight from the database — no network, no embedder.
@@ -20,6 +21,7 @@ export async function loadRankedFromDb(
   db: Db,
   modelId: string,
   now: number,
+  hasher: Hasher,
 ): Promise<{ ranked: RankOutput; profile: Profile } | null> {
   const profile = await repo.getStoredProfile(db);
   if (profile === null) return null;
@@ -45,7 +47,18 @@ export async function loadRankedFromDb(
   const encodedProfile = await repo.getStoredProfileEmbedding(db, modelId);
   const profileVector = encodedProfile === null ? null : decodeVector(encodedProfile);
 
-  const ranked = rankJobs({ jobs, vectors, profileVector, profile, now });
+  // AI judgements the person already paid for, so opening the app shows the
+  // same list the last search ended with rather than a plainer one. Filtered
+  // to scores whose job text has not moved since they were made.
+  const stored = await repo.loadLlmScores(db, profileScoreHash(hasher, profile));
+  const llmScores = new Map<string, LlmScore>();
+  for (const [jobId, score] of stored) {
+    if (score.contentHash === null || score.contentHash === hashOf.get(jobId)) {
+      llmScores.set(jobId, score);
+    }
+  }
+
+  const ranked = rankJobs({ jobs, vectors, profileVector, profile, now, llmScores });
   return { ranked, profile };
 }
 

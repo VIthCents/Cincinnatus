@@ -295,7 +295,7 @@ describe("loadRankedFromDb", () => {
     const db = new NodeDb(":memory:");
     await migrate(db, NOW);
 
-    expect(await loadRankedFromDb(db, MODEL, NOW)).toBeNull();
+    expect(await loadRankedFromDb(db, MODEL, NOW, nodeHasher)).toBeNull();
 
     // Two jobs, same age, different stored vectors. The profile vector points
     // at [1,0], so jobA (aligned) must outrank jobB (orthogonal).
@@ -323,7 +323,7 @@ describe("loadRankedFromDb", () => {
       MODEL,
     );
 
-    const loaded = await loadRankedFromDb(db, MODEL, NOW);
+    const loaded = await loadRankedFromDb(db, MODEL, NOW, nodeHasher);
     expect(loaded).not.toBeNull();
     const ranked = loaded!.ranked.ranked;
     expect(ranked.length).toBe(2);
@@ -377,7 +377,7 @@ describe("loadRankedFromDb", () => {
       MODEL,
     );
 
-    const loaded = await loadRankedFromDb(db, MODEL, NOW);
+    const loaded = await loadRankedFromDb(db, MODEL, NOW, nodeHasher);
     const ids = loaded!.ranked.ranked.map((r) => r.job.id);
     expect(ids).toContain(oldBoardJob.id);
     expect(ids).not.toContain(staleAd.id);

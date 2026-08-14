@@ -7,6 +7,7 @@ import {
 import type {
   ApplicationStatus,
   Job,
+  LlmScore,
   Profile,
   SourceId,
   TrackedApplication,
@@ -499,6 +500,95 @@ export async function listFeedback(
     [verdict],
   );
   return new Set(rows.map((r) => r.job_id));
+}
+
+// -----------------------------------------------------------------------------
+// LLM match scores
+// -----------------------------------------------------------------------------
+
+/**
+ * Only `llm` rows are ever written here.
+ *
+ * The `scores` table has always allowed `method IN ('embed','llm')`, and the
+ * embed half stays unused deliberately: an embedding fit is recomputed from
+ * stored vectors in milliseconds on every rank, so persisting five thousand of
+ * them per run would be write churn with no reader. LLM scores are different —
+ * they cost the person money, so losing one has a price.
+ */
+export async function saveLlmScores(
+  db: Db,
+  scores: ReadonlyMap<string, LlmScore>,
+): Promise<void> {
+  if (scores.size === 0) return;
+  await db.runMany(
+    `INSERT INTO scores (job_id, method, fit_score, rationale, scored_at, profile_hash, content_hash)
+     VALUES (?, 'llm', ?, ?, ?, ?, ?)
+     ON CONFLICT(job_id, method) DO UPDATE SET
+       fit_score    = excluded.fit_score,
+       rationale    = excluded.rationale,
+       scored_at    = excluded.scored_at,
+       profile_hash = excluded.profile_hash,
+       content_hash = excluded.content_hash`,
+    [...scores].map(([jobId, s]) => [
+      jobId,
+      s.fit,
+      s.why,
+      s.scoredAt,
+      s.profileHash,
+      s.contentHash,
+    ]),
+  );
+}
+
+/**
+ * Stored judgements that are still about this person. Job-text staleness is
+ * checked by the caller, which is the only place that knows the current hashes.
+ */
+export async function loadLlmScores(
+  db: Db,
+  profileHash: string,
+): Promise<Map<string, LlmScore>> {
+  const rows = await db.all<{
+    job_id: string;
+    fit_score: number;
+    rationale: string | null;
+    scored_at: number;
+    content_hash: string | null;
+  }>(
+    `SELECT job_id, fit_score, rationale, scored_at, content_hash
+       FROM scores WHERE method = 'llm' AND profile_hash = ?`,
+    [profileHash],
+  );
+  return new Map(
+    rows.map((r) => [
+      r.job_id,
+      {
+        fit: r.fit_score,
+        why: r.rationale ?? "",
+        profileHash,
+        contentHash: r.content_hash,
+        scoredAt: r.scored_at,
+      },
+    ]),
+  );
+}
+
+/**
+ * Drop judgements made about a different person, or under an older prompt.
+ *
+ * Also drops rows whose job is gone: purgeStaleAggregatorJobs deletes jobs
+ * without knowing this table exists, and a score with no job is a row nothing
+ * will ever read again.
+ */
+export async function deleteStaleLlmScores(db: Db, profileHash: string): Promise<void> {
+  await db.run(
+    `DELETE FROM scores
+      WHERE method = 'llm'
+        AND (profile_hash IS NULL
+             OR profile_hash <> ?
+             OR job_id NOT IN (SELECT id FROM jobs))`,
+    [profileHash],
+  );
 }
 
 // -----------------------------------------------------------------------------

@@ -153,8 +153,19 @@ export interface LlmResponse {
  * is easy to test when "no key" is just an adapter that rejects.
  *
  * PRIVACY INVARIANT (constraint 3): the ONLY user data that may ever enter an
- * LlmRequest is resume text, profile fields, and job text — and only through
- * the functions in src/core/documents/. Nothing else egresses.
+ * LlmRequest is resume text, profile fields, job text, and what the person
+ * types into chat. Nothing else egresses.
+ *
+ * There are exactly three doors, and this list is the whole list:
+ *
+ *   - src/core/documents/  — resume text and one job, for analysis, revision,
+ *                            tailoring and cover letters
+ *   - src/core/chat/       — what the person typed, plus their resume
+ *   - src/core/pipeline/llmScore.ts
+ *                          — the STRUCTURED profile and job text, never the
+ *                            resume (SPEC §7: scoring calls send the profile)
+ *
+ * Adding a fourth means changing this comment in the same commit.
  */
 export interface Llm {
   complete(req: LlmRequest): Promise<LlmResponse>;

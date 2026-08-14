@@ -180,6 +180,29 @@ export const MIGRATIONS: readonly Migration[] = [
       `CREATE INDEX IF NOT EXISTS idx_applications_applied ON applications (applied_at)`,
     ],
   },
+  {
+    version: 3,
+    statements: [
+      // What an LLM match score was judged against, so a stale one can be
+      // told from a current one.
+      //
+      // profile_hash covers the person: their structured profile plus the
+      // version of the prompt that read it. Re-parse a resume and the titles,
+      // skills or education change, so every stored judgement about "could
+      // they get this job" is about somebody slightly different and has to go.
+      //
+      // content_hash covers the job: the same embed hash the vector is keyed
+      // by. Job rows are upserted on every fetch, so a re-served advert or an
+      // edited posting changes the text the score was formed from. Without
+      // this the embedding would correctly re-embed while the score and its
+      // rationale stayed behind, describing text nobody can see any more.
+      //
+      // Both nullable: the columns arrive on a table that has always been
+      // empty, and SQLite cannot add a NOT NULL column without a default.
+      `ALTER TABLE scores ADD COLUMN profile_hash TEXT`,
+      `ALTER TABLE scores ADD COLUMN content_hash TEXT`,
+    ],
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS.reduce(

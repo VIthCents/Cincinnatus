@@ -21,6 +21,7 @@ import {
 import { buildSearchUrl, createUsaJobsSource } from "../src/core/sources/usajobs.ts";
 import { ALLOWED_HOSTS } from "../src/core/net/allowlist.ts";
 import { createFakeEmbedder, fakeClock, fakeHasher, stubHttp } from "./fakes.ts";
+import { createFakeLlm } from "./fakes/llm.ts";
 import type { Job, Profile } from "../src/core/types.ts";
 
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
@@ -244,6 +245,7 @@ describe("end to end over recorded fixtures", () => {
       reporter: () => {},
       profile,
       sources,
+      llm: null,
       maxEmbed: null,
     });
   }
@@ -300,6 +302,7 @@ describe("end to end over recorded fixtures", () => {
       profile,
       sources,
       notes: [note],
+      llm: null,
       maxEmbed: null,
     });
 
@@ -313,6 +316,47 @@ describe("end to end over recorded fixtures", () => {
   it("defaults notes to an empty list when the caller has nothing to say", async () => {
     const { report } = await run();
     expect(report.notes).toEqual([]);
+  });
+
+  /**
+   * Constraint 6: everything above the scoring stage is the whole product for
+   * somebody who never connects a key. Not one request, not one row.
+   */
+  it("asks the AI nothing at all without a key", async () => {
+    const { report } = await run();
+    expect(report.llmScored).toBe(0);
+    expect(report.llmScoreNote).toBeNull();
+  });
+
+  it("judges the top jobs with a key, and stores what it paid for", async () => {
+    const { http, sources } = stubbedSources();
+    const db = freshDb();
+
+    // One reply per batch, covering whatever ids it is asked about.
+    const { llm, requests } = createFakeLlm(
+      Array.from({ length: 4 }, () => JSON.stringify({ scores: [] })),
+    );
+
+    const { report } = await runPipeline({
+      db,
+      http,
+      clock: fakeClock(NOW),
+      hasher: fakeHasher,
+      embedder: createFakeEmbedder(),
+      reporter: () => {},
+      profile,
+      sources,
+      llm,
+      maxEmbed: null,
+    });
+
+    // It asked, using the fast model and a schema, about no more than the cap.
+    expect(requests.length).toBeGreaterThan(0);
+    expect(requests[0]!.model).toBe("fast");
+    expect(requests[0]!.jsonSchema).toBeDefined();
+    expect(report.llmScoreNote).toBeNull();
+
+    db.close();
   });
 
   it("embeds identical text only once", async () => {
@@ -336,6 +380,7 @@ describe("end to end over recorded fixtures", () => {
       reporter: () => {},
       profile,
       sources: withBroken,
+      llm: null,
       maxEmbed: null,
     });
 

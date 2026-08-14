@@ -225,6 +225,10 @@ export async function runSearch(
 ): Promise<RunResult> {
   const embedder = await getEmbedder();
   const { sources, notes } = await buildSources(profile);
+  // Null without a key, which turns the AI scoring stage off entirely. Already
+  // wrapped with spend recording, so scoring shows up in the running estimate
+  // without any extra wiring.
+  const llm = await getLlm();
 
   const result = await runPipeline({
     db,
@@ -236,6 +240,7 @@ export async function runSearch(
     profile,
     sources,
     notes,
+    llm,
     maxEmbed: null, // the product default: embed everything, show progress
   });
 
@@ -245,7 +250,7 @@ export async function runSearch(
 
 /** The last known ranking, straight from the database — instant, no network. */
 export function loadLastRanking(): ReturnType<typeof loadRankedFromDb> {
-  return loadRankedFromDb(db, MODEL_ID, tauriClock.now());
+  return loadRankedFromDb(db, MODEL_ID, tauriClock.now(), tauriHasher);
 }
 
 // -----------------------------------------------------------------------------

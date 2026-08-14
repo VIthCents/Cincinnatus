@@ -299,6 +299,7 @@ interface SearchFlags {
   db?: string;
   top?: string;
   "max-embed"?: string;
+  "no-llm"?: boolean;
   "usajobs-days"?: string;
   offline?: boolean;
   capture?: boolean;
@@ -474,6 +475,10 @@ async function commandSearch(values: SearchFlags): Promise<number> {
   });
 
   const maxEmbedRaw = values["max-embed"];
+  // AI scoring runs when a key is in the environment, unless --no-llm. Fixture
+  // and offline runs stay free by default because there is no key to find.
+  const scoring = values["no-llm"] === true ? null : requireLlm();
+
   const { report, ranked } = await runPipeline({
     db,
     http,
@@ -483,6 +488,7 @@ async function commandSearch(values: SearchFlags): Promise<number> {
     reporter,
     profile,
     sources,
+    llm: scoring?.llm ?? null,
     maxEmbed: maxEmbedRaw === undefined ? null : Number(maxEmbedRaw),
   });
 
@@ -841,6 +847,7 @@ async function main(): Promise<number> {
       db: { type: "string" },
       top: { type: "string" },
       "max-embed": { type: "string" },
+      "no-llm": { type: "boolean" },
       "usajobs-days": { type: "string" },
       offline: { type: "boolean", default: false },
       capture: { type: "boolean", default: false },

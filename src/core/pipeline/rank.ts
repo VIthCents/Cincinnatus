@@ -5,7 +5,7 @@ import {
 } from "../config.ts";
 import { normalizeCompany, normalizeTitle } from "./normalize.ts";
 import { dot } from "../embed/vector.ts";
-import type { FitDistribution, Job, Profile, RankedJob } from "../types.ts";
+import type { FitDistribution, Job, LlmScore, Profile, RankedJob } from "../types.ts";
 import {
   ageInDays,
   blend,
@@ -96,6 +96,12 @@ export interface RankInput {
   readonly profile: Profile;
   /** Read once per run, so every job is aged against the same instant. */
   readonly now: number;
+  /**
+   * AI judgements, when the person has connected a key and a run has made
+   * them. Absent everywhere else — including in the golden-set evaluation,
+   * which stays a measurement of the embedding path alone.
+   */
+  readonly llmScores?: ReadonlyMap<string, LlmScore>;
 }
 
 export interface RankOutput {
@@ -146,9 +152,11 @@ function spreadEmployers(ranked: readonly RankedJob[]): RankedJob[] {
 }
 
 export function rankJobs(input: RankInput): RankOutput {
-  const { jobs, vectors, profileVector, profile, now } = input;
+  const { jobs, vectors, profileVector, profile, now, llmScores } = input;
 
   const scored: RankedJob[] = [];
+  /** Kept beside the merged fit, for the widening decision alone. */
+  const embedFitOf = new Map<string, number>();
 
   for (const job of jobs) {
     // A collapsed duplicate is represented by its canonical row.
@@ -177,13 +185,22 @@ export function rankJobs(input: RankInput): RankOutput {
     const age = ageInDays(now, effectivePostedAt);
     const freshness = freshnessFactor(age);
 
+    // An LLM judgement replaces the embedding fit for the order, the badge and
+    // the filters, because the prompt is written to these same bands — it is
+    // answering the question the badge words claim to answer, which the cosine
+    // never quite did.
+    const judged = llmScores?.get(job.id);
+    const effectiveFit = judged?.fit ?? fitScore;
+    embedFitOf.set(job.id, fitScore);
+
     scored.push({
       job,
-      fitScore,
+      fitScore: effectiveFit,
       ageDays: age,
       freshness,
-      finalScore: blend(fitScore, freshness),
+      finalScore: blend(effectiveFit, freshness),
       withinReach: isWithinReach(job, profile),
+      llmWhy: judged?.why ?? null,
     });
   }
 
@@ -208,7 +225,18 @@ export function rankJobs(input: RankInput): RankOutput {
   // list no city. Meanwhile the corpus held a literal "Class A Driver" job that
   // the person was never shown. Counting jobs measured the wrong thing: a
   // plentiful local list and a useless one are indistinguishable by length.
-  const nearbyWorthwhile = nearby.filter((r) => r.fitScore >= MIN_FIT_FOR_WIDENING);
+  //
+  // This ONE decision reads the embedding fit rather than the merged one, and
+  // the difference matters. Only the top ~30 jobs are ever sent for AI scoring,
+  // and those are the jobs most likely to come back above the band — so a
+  // merged fit here would let a handful of upgraded scores push the count over
+  // the threshold, decide there was plenty nearby, and collapse the nationwide
+  // list. The widening question is "how much real work is near this person",
+  // which is about the corpus, and it must be answered the same way whether or
+  // not they have connected a key.
+  const nearbyWorthwhile = nearby.filter(
+    (r) => (embedFitOf.get(r.job.id) ?? r.fitScore) >= MIN_FIT_FOR_WIDENING,
+  );
   const widened = nearbyWorthwhile.length < MIN_RESULTS_BEFORE_WIDENING;
   const ranked = spreadEmployers(widened ? [...scored].sort(byScore) : nearby);
 

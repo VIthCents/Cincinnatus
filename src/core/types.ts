@@ -141,8 +141,32 @@ export interface RankedJob {
   readonly freshness: number;
   /** fitScore * freshness. The single number the list is ordered by. */
   readonly finalScore: number;
+  /**
+   * The AI's one-line reason, when this job has a current LLM score. Null
+   * otherwise — including for everyone with no key, who gets the local
+   * "Mentions X and Y" line instead.
+   */
+  readonly llmWhy: string | null;
   /** Whether this job is within the user's radius, or remote. */
   readonly withinReach: boolean;
+}
+
+/**
+ * An AI judgement of one job for one person (SPEC §5).
+ *
+ * Carries what it was judged against, because a score whose grounds have moved
+ * is worse than no score: it looks current and is not. `profileHash` covers the
+ * person and the prompt version; `contentHash` covers the job's own text.
+ */
+export interface LlmScore {
+  /** 0–100, on the same scale and the same bands as the embedding fit. */
+  readonly fit: number;
+  /** One short sentence, spoken to the seeker. */
+  readonly why: string;
+  readonly profileHash: string;
+  /** Null only for a job that had no embedding when it was judged. */
+  readonly contentHash: string | null;
+  readonly scoredAt: number;
 }
 
 // -----------------------------------------------------------------------------
@@ -229,4 +253,15 @@ export interface RunReport {
    * people to distrust a working app.
    */
   readonly notes: readonly string[];
+  /** How many jobs the AI judged this run. 0 without a key. */
+  readonly llmScored: number;
+  /**
+   * Plain words when AI scoring could not finish. Null when it did, and null
+   * when there was no key to try with.
+   *
+   * Deliberately not surfaced on screen: the ranked list is complete and
+   * useful either way, and a banner about a feature that silently improved
+   * nothing is noise. It is here for the saved run and the harness.
+   */
+  readonly llmScoreNote: string | null;
 }

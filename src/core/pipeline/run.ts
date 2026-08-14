@@ -1,5 +1,5 @@
 import { EMBED_BATCH_SIZE } from "../config.ts";
-import type { Clock, Db, Embedder, Hasher, Http, Reporter } from "../ports.ts";
+import type { Clock, Db, Embedder, Hasher, Http, Llm, Reporter } from "../ports.ts";
 import type { Job, Profile, RankedJob, RunReport, SourceOutcome } from "../types.ts";
 import { migrate } from "../db/migrations.ts";
 import * as repo from "../db/repo.ts";
@@ -9,6 +9,7 @@ import { buildJobText, buildProfileText } from "../embed/text.ts";
 import { decodeVector, encodeVector } from "../util/base64.ts";
 import { normalize } from "../embed/vector.ts";
 import { rankJobs } from "./rank.ts";
+import { profileScoreHash, scoreJobs, selectJobsToScore } from "./llmScore.ts";
 import { runSource, type Source } from "../sources/source.ts";
 
 export interface RunOptions {
@@ -29,6 +30,12 @@ export interface RunOptions {
    */
   readonly maxEmbed: number | null;
   /**
+   * The AI, or null when the person has not connected a key. Required rather
+   * than optional so that adding scoring could not silently skip a caller:
+   * every call site had to say which it was.
+   */
+  readonly llm: Llm | null;
+  /**
    * Plain-words notes about this run that the caller already knows and the
    * pipeline cannot discover — chiefly a source left out because its daily
    * limit is spent. Optional: most callers have nothing to say.
@@ -42,7 +49,8 @@ export interface RunResult {
 }
 
 export async function runPipeline(options: RunOptions): Promise<RunResult> {
-  const { db, http, clock, hasher, embedder, reporter, profile, sources } = options;
+  const { db, http, clock, hasher, embedder, reporter, profile, sources, llm } =
+    options;
 
   // Read the clock exactly once. Every age in this run is measured against the
   // same instant, so two jobs posted at the same moment cannot land on
@@ -217,13 +225,77 @@ export async function runPipeline(options: RunOptions): Promise<RunResult> {
 
   // --- rank ----------------------------------------------------------------
 
-  const { ranked, widenedBeyondRadius, fit, candidates, reachable } = rankJobs({
+  let { ranked, widenedBeyondRadius, fit, candidates, reachable } = rankJobs({
     jobs: survivors,
     vectors: vectorsByJob,
     profileVector,
     profile,
     now: startedAt,
   });
+
+  // --- AI match scoring (SPEC §5) ------------------------------------------
+  //
+  // Runs on the list as ranked, so the jobs judged are the ones the person is
+  // about to read. Skipped entirely without a key: everything above this point
+  // is the whole product for someone who never connects one.
+  let llmScored = 0;
+  let llmScoreNote: string | null = null;
+
+  if (llm !== null && ranked.length > 0) {
+    const profileHash = profileScoreHash(hasher, profile);
+    await repo.deleteStaleLlmScores(db, profileHash);
+    const stored = await repo.loadLlmScores(db, profileHash);
+    const hidden = await repo.listFeedback(db, "hidden");
+
+    const toScore = selectJobsToScore({
+      ranked,
+      stored,
+      hidden,
+      contentHashOf: hashOf,
+    });
+
+    if (toScore.length > 0) {
+      reporter({
+        kind: "note",
+        message: `Asking the AI which of ${String(toScore.length)} jobs fit you best...`,
+      });
+    }
+
+    const outcome = await scoreJobs({
+      llm,
+      hasher,
+      profile,
+      jobs: toScore,
+      contentHashOf: hashOf,
+      now: startedAt,
+      // Per batch, so an interrupted pass keeps what it has already paid for —
+      // the same reasoning as the per-batch embedding writes above.
+      onScored: (batch) => repo.saveLlmScores(db, batch),
+      onBatch: (done, total) => {
+        reporter({
+          kind: "note",
+          message: `Checked ${String(done)} of ${String(total)} jobs...`,
+        });
+      },
+    });
+
+    llmScored = outcome.scored;
+    llmScoreNote = outcome.note;
+
+    const merged = new Map(stored);
+    for (const [id, score] of outcome.scores) merged.set(id, score);
+
+    if (merged.size > 0) {
+      ({ ranked, widenedBeyondRadius, fit, candidates, reachable } = rankJobs({
+        jobs: survivors,
+        vectors: vectorsByJob,
+        profileVector,
+        profile,
+        now: startedAt,
+        llmScores: merged,
+      }));
+    }
+  }
 
   const finishedAt = clock.now();
 
@@ -240,6 +312,8 @@ export async function runPipeline(options: RunOptions): Promise<RunResult> {
     candidates,
     reachable,
     notes: options.notes ?? [],
+    llmScored,
+    llmScoreNote,
   };
 
   await repo.saveRun(

@@ -381,11 +381,12 @@ function JobCard({
 
   const salary = salaryWords(job);
   const aiConnected = state.keys.anthropic;
-  // Not gated on the AI key: whyWords is local string matching against the
-  // person's own skills and titles and costs nothing. Hiding it from keyless
-  // users withheld a free, honest feature and made the banner above — which
-  // used to advertise it as something the AI unlocks — untrue as well.
-  const why = state.profile === null ? null : whyWords(job, state.profile);
+  // The AI's reason when this job has a current judgement, and otherwise the
+  // local one. whyWords is not gated on the key: it is string matching against
+  // the person's own skills and titles, costs nothing, and withholding it from
+  // keyless users gave them a blank line for no reason.
+  const why =
+    ranked.llmWhy ?? (state.profile === null ? null : whyWords(job, state.profile));
   // Restored across launches; one verdict per job; tapping again un-votes.
   const voted = state.feedback.get(job.id) ?? null;
 

@@ -1515,3 +1515,61 @@ before it.
 
 The `TODO(location)` marker in `rank.ts` stays. It refers to the geocoding question, which this
 entry rules on but does not solve.
+
+---
+
+## 2026-08-14 — LLM match scoring, keyed to the profile and the job it judged
+
+**Context.** SPEC §5 promised the embedding fit would be "upgraded by LLM scoring for the top ~30 new
+jobs when a key is connected", and §7 listed batched match scoring as an AI task. Neither was built.
+The `scores` table has existed since v1 with `method IN ('embed','llm')` and had never been read or
+written. The user ruled on 2026-08-14 to build it rather than retire it.
+
+**Decision.** A scoring stage in `runPipeline`, after the first rank pass, behind `RunOptions.llm`.
+
+*What "new" means.* Not "first seen this run" — **not yet judged for this profile and this job text**.
+Walking the ranked list means connecting a key judges the existing top 30 immediately, rather than
+leaving the list looking untouched until new jobs happen to arrive. Hidden jobs are never sent: they
+cost money and the person has already said no.
+
+*Invalidation needs two hashes, not one.* `profile_hash` covers the person plus the prompt version, so
+re-parsing a resume retires every judgement made about the older reading of them. `content_hash`
+covers the job — the same embed hash the vector is keyed by. Job rows are upserted on every fetch, so
+a re-served advert or an edited posting changes the very text a score was formed from; without this
+the embedding would correctly re-embed while the score and its rationale stayed behind, describing
+text nobody can see any more. A score is used only when both match.
+
+*Embed rows are still never written to `scores`.* An embedding fit is recomputed from stored vectors
+in milliseconds on every rank; persisting thousands per run would be write churn with no reader. LLM
+scores are different because they cost the person money.
+
+*The merge, and the one place it must not reach.* An LLM fit replaces the embedding fit for the
+order, the badge, and the filters — the prompt is written to the same measured bands, so it is
+answering the question the badge words claim to answer. **But the widening decision keeps reading the
+embedding fit.** Only the top ~30 jobs are ever scored, and those are exactly the ones most likely to
+come back above the band, so a merged fit there would let a handful of upgraded scores conclude there
+was plenty of work nearby and collapse the nationwide list — for someone whose local corpus had not
+changed at all. "How much real work is near this person" is a question about the corpus and must be
+answered identically with or without a key. A test breaks if anyone reaches for the merged value.
+
+*Failure is not a dead end.* `scoreJobs` never throws. A failed batch ends the pass — the realistic
+causes are an invalid key and exhausted credits, neither of which improves on a retry — keeps
+everything already judged and persisted, and returns plain words. Scores are saved per batch, the
+same crash-safety the embedding loop already has. The note is deliberately not shown on screen: the
+ranked list is complete and useful either way, and a banner about a feature that silently improved
+nothing is noise.
+
+*Cost.* About $0.019 for a full 30-job pass at Haiku list prices; steady-state runs score only new
+arrivals. Spend recording needed no wiring — `getLlm()` already wraps every call.
+
+**Consequence.** The golden sets stay a measurement of the embedding path alone: `rankJobs` takes
+`llmScores` as an optional argument and `rankEval` never passes one. Re-measured after the change —
+CDL 0.5651, infantry 0.7452 — identical.
+
+That purity is also the honest limit. These scores are unlabelled, so nothing here is measured the
+way the bands and the reach rules were. The rubric is anchored to the bands by interpolating the
+constants into the prompt, which keeps it from drifting, but whether the model's 60 means what the
+judges' 60 meant is unverified. A labelled stratum is the path to ever gating on it.
+
+`SCORE_PROMPT_VERSION` is part of the profile hash, so any change to the prompt — including a band
+retune, since the bands are interpolated into it — retires the scores judged under the old wording.
