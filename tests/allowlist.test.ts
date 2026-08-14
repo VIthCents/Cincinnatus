@@ -107,6 +107,34 @@ describe("the OS-level twin (Tauri http capability)", () => {
       expect(urls).toContain(`https://${host}/**`);
     }
   });
+
+  /**
+   * dialog and notification are granted command by command. Taking the
+   * defaults would also hand this app a file-READ picker it never opens and
+   * thirteen notification commands it never calls — on a machine holding
+   * somebody's resume, medical-adjacent by implication.
+   *
+   * Written as "must not contain the default" rather than an exact list, so
+   * adding a genuinely needed command is a one-line change while quietly
+   * re-broadening to the whole plugin is a failing test.
+   */
+  it("keeps dialog and notification narrowed to the commands actually used", () => {
+    const cap = JSON.parse(
+      readFileSync(join(repoRoot, "src-tauri", "capabilities", "default.json"), "utf8"),
+    ) as { permissions: (string | { identifier: string })[] };
+    const named = cap.permissions.filter((p): p is string => typeof p === "string");
+
+    expect(named).not.toContain("dialog:default");
+    expect(named).not.toContain("notification:default");
+
+    // The three the app really calls: App.tsx asks whether it may notify, asks
+    // for permission if not, then notifies. Plus the save dialog behind
+    // "Save as" in src/tauri/secrets.ts.
+    expect(named).toContain("dialog:allow-save");
+    expect(named).toContain("notification:allow-is-permission-granted");
+    expect(named).toContain("notification:allow-request-permission");
+    expect(named).toContain("notification:allow-notify");
+  });
 });
 
 describe("buildQuery", () => {

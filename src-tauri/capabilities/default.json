@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Main window. Two notes. (1) sql:allow-execute is listed separately on purpose — sql:default is only [allow-close, allow-load, allow-select], so without it every INSERT/UPDATE/CREATE from JS is rejected while reads keep working, which presents as a schema bug rather than a permissions one. (2) The http scope below is the OS-level twin of src/core/net/allowlist.ts: even if the TypeScript allowlist were deleted, the Rust side would still refuse to fetch any host not named here (constraint 1).",
+  "description": "Main window. Three notes. (1) sql:allow-execute is listed separately on purpose — sql:default is only [allow-close, allow-load, allow-select], so without it every INSERT/UPDATE/CREATE from JS is rejected while reads keep working, which presents as a schema bug rather than a permissions one. (2) The http scope below is the OS-level twin of src/core/net/allowlist.ts: even if the TypeScript allowlist were deleted, the Rust side would still refuse to fetch any host not named here (constraint 1). (3) dialog and notification are named command by command rather than taking the defaults: dialog:default would also grant a file-READ picker this app never opens, and notification:default grants sixteen commands where three are used. An app holding a veteran's resume should be able to say exactly what it can do.",
   "windows": ["main"],
   "permissions": [
     "core:default",
@@ -9,8 +9,10 @@
     "opener:default",
     "sql:default",
     "sql:allow-execute",
-    "notification:default",
-    "dialog:default",
+    "notification:allow-is-permission-granted",
+    "notification:allow-request-permission",
+    "notification:allow-notify",
+    "dialog:allow-save",
     {
       "identifier": "http:default",
       "allow": [

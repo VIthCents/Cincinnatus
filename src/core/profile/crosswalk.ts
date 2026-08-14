@@ -305,7 +305,3 @@ export function civilianTitlesFor(code: string): readonly string[] {
   const key = code.trim().toUpperCase();
   return BY_CODE.get(key)?.civilianTitles ?? generatedTitlesFor(key);
 }
-
-export function crosswalkEntryFor(code: string): CrosswalkEntry | null {
-  return BY_CODE.get(code.trim().toUpperCase()) ?? null;
-}

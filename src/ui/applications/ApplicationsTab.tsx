@@ -47,9 +47,15 @@ export function ApplicationsTab() {
   // documents prepared in the meantime show up.
   const [withDocuments, setWithDocuments] = useState<ReadonlySet<string>>(new Set());
   const [showing, setShowing] = useState<Job | null>(null);
+  const [docsTrouble, setDocsTrouble] = useState(false);
 
   useEffect(() => {
-    void repo.listJobIdsWithDocuments(db).then(setWithDocuments, () => undefined);
+    // A failure here used to be swallowed, so "See the papers you made" simply
+    // never appeared and the person was left believing the app had lost them.
+    void repo.listJobIdsWithDocuments(db).then(setWithDocuments, (err: unknown) => {
+      console.error(err);
+      setDocsTrouble(true);
+    });
   }, []);
 
   const now = tauriClock.now();
@@ -59,6 +65,12 @@ export function ApplicationsTab() {
       <div className="screen__head">
         <h2 className="screen__title">Jobs you applied to</h2>
       </div>
+
+      {docsTrouble && state.applications.length > 0 && (
+        <Banner tone="caution" title="Cincinnatus could not check for saved papers.">
+          Your applications are all here. Leave this tab and come back to try again.
+        </Banner>
+      )}
 
       {state.applications.length === 0 ? (
         <EmptyState

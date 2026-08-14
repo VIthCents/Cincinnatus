@@ -88,10 +88,6 @@ export function assertAllowed(url: string): string {
   return host;
 }
 
-export function isAllowedHost(host: string): boolean {
-  return ALLOWED_HOSTS.includes(host);
-}
-
 /**
  * Percent-encode a query string. Core cannot use `URLSearchParams` for the same
  * reason it cannot use `URL`.

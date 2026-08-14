@@ -73,6 +73,12 @@ function Shell() {
 
   // Tray "Search for jobs now" + the Rust scheduler metronome.
   useEffect(() => {
+    // No listener during the wizard or a boot failure, and that is deliberate
+    // rather than an oversight: the Rust side raises the window before it emits
+    // (see show_main_window in lib.rs), so a tray click during setup puts the
+    // wizard in front of the person — which is the screen that explains what to
+    // do next. A notice saying "finish setup first" would be telling them what
+    // they are already looking at.
     if (!state.booted || state.needsWizard) return;
 
     const unlistenSearch = listen("search-now", () => {
@@ -145,7 +151,7 @@ function Shell() {
           onClick={() =>
             dispatch({
               type: "tab",
-              tab: state.tab === "settings" ? "chat" : "settings",
+              tab: state.tab === "settings" ? state.returnTab : "settings",
             })
           }
         />

@@ -70,6 +70,8 @@ export interface AppState {
   readonly bootError: string;
   readonly needsWizard: boolean;
   readonly tab: Tab;
+  /** Where closing Settings returns to. Never "settings" itself. */
+  readonly returnTab: Exclude<Tab, "settings">;
   readonly resume: ResumeData | null;
   readonly profile: Profile | null;
   readonly keys: { anthropic: boolean; usajobs: boolean; adzuna: boolean };
@@ -117,6 +119,7 @@ const initialState: AppState = {
   bootError: "",
   needsWizard: false,
   tab: "chat",
+  returnTab: "chat",
   resume: null,
   profile: null,
   keys: { anthropic: false, usajobs: false, adzuna: false },
@@ -185,7 +188,7 @@ export type Action =
   | { type: "chat_busy"; busy: boolean }
   | { type: "theme"; theme: ThemePreference };
 
-function reducer(state: AppState, action: Action): AppState {
+export function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
     case "booted":
       return {
@@ -210,7 +213,14 @@ function reducer(state: AppState, action: Action): AppState {
     case "boot_failed":
       return { ...state, booted: false, bootError: action.message };
     case "tab":
-      return { ...state, tab: action.tab };
+      return {
+        ...state,
+        tab: action.tab,
+        // Remember where they were so closing Settings goes back there. The
+        // gear used to drop everyone on Chat, so opening Settings from the
+        // jobs list and closing it lost their place.
+        returnTab: action.tab === "settings" ? state.returnTab : action.tab,
+      };
     case "wizard_done":
       return { ...state, needsWizard: false, profile: action.profile };
     case "resume":

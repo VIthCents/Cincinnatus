@@ -1,10 +1,5 @@
 import { useEffect, useId, useRef } from "react";
-import type {
-  ButtonHTMLAttributes,
-  InputHTMLAttributes,
-  ReactNode,
-  TextareaHTMLAttributes,
-} from "react";
+import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from "react";
 import { Icon, type IconName } from "./Icon.tsx";
 
 /**
@@ -184,49 +179,6 @@ export function TextField({
       ) : null}
       <input
         id={id}
-        className={["cn-input", mono && "cn-input--mono"].filter(Boolean).join(" ")}
-        aria-invalid={error !== undefined ? true : undefined}
-        aria-describedby={describedBy}
-        {...rest}
-      />
-      {error !== undefined ? <FieldError id={`${id}-error`}>{error}</FieldError> : null}
-    </div>
-  );
-}
-
-export type TextAreaFieldProps = FieldChrome &
-  Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, "id" | "className">;
-
-export function TextAreaField({
-  id: givenId,
-  label,
-  hint,
-  error,
-  mono = false,
-  className = "",
-  rows = 3,
-  ...rest
-}: TextAreaFieldProps) {
-  const generated = useId();
-  const id = givenId ?? generated;
-  const describedBy =
-    [hint !== undefined && `${id}-hint`, error !== undefined && `${id}-error`]
-      .filter(Boolean)
-      .join(" ") || undefined;
-
-  return (
-    <div className={["cn-field", className].filter(Boolean).join(" ")}>
-      <label className="cn-field__label" htmlFor={id}>
-        {label}
-      </label>
-      {hint !== undefined ? (
-        <p className="cn-field__hint" id={`${id}-hint`}>
-          {hint}
-        </p>
-      ) : null}
-      <textarea
-        id={id}
-        rows={rows}
         className={["cn-input", mono && "cn-input--mono"].filter(Boolean).join(" ")}
         aria-invalid={error !== undefined ? true : undefined}
         aria-describedby={describedBy}
@@ -466,49 +418,6 @@ export function EmptyState({
   );
 }
 
-export type ToastTone = "success" | "error" | "info";
-
-const TOAST_GLYPH: Record<ToastTone, IconName> = {
-  success: "check_circle",
-  error: "cancel",
-  info: "info",
-};
-
-export function Toast({
-  tone = "success",
-  title,
-  description,
-  onDismiss,
-  className = "",
-}: {
-  tone?: ToastTone;
-  title: string;
-  description?: string;
-  onDismiss?: () => void;
-  className?: string;
-}) {
-  return (
-    <div
-      className={["cn-toast", `cn-toast--${tone}`, className].filter(Boolean).join(" ")}
-      role={tone === "error" ? "alert" : "status"}
-      aria-live={tone === "error" ? "assertive" : "polite"}
-    >
-      <span className="cn-toast__icon">
-        <Icon name={TOAST_GLYPH[tone]} size={24} />
-      </span>
-      <span className="cn-toast__body">
-        <span className="cn-toast__title">{title}</span>
-        {description !== undefined ? (
-          <span className="cn-toast__desc">{description}</span>
-        ) : null}
-      </span>
-      {onDismiss ? (
-        <IconButton icon="close" label="Close this message" onClick={onDismiss} />
-      ) : null}
-    </div>
-  );
-}
-
 /** A short wait with no measurable end. Long waits use RunProgress instead. */
 export function Busy({ label }: { label: string }) {
   return (
@@ -573,7 +482,12 @@ export function TabBar<Id extends string>({
           className="cn-tab"
           id={`tab-${t.id}`}
           aria-selected={active === t.id}
-          aria-controls={`panel-${t.id}`}
+          // Only the active tab has a panel: exactly one is rendered at a
+          // time, deliberately, because the tabs rely on remounting (the
+          // applications tab re-reads its documents, the settings panel jumps
+          // to a section). Pointing at ids that do not exist is an ARIA error
+          // a screen reader can act on, so the attribute is omitted instead.
+          {...(active === t.id ? { "aria-controls": `panel-${t.id}` } : {})}
           tabIndex={active === t.id ? 0 : -1}
           onClick={() => onChange(t.id)}
         >

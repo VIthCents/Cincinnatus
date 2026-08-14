@@ -108,5 +108,3 @@ export function Icon({
     </svg>
   );
 }
-
-export const ICON_NAMES = Object.keys(PATHS) as IconName[];

@@ -90,7 +90,6 @@ export interface RunProgressProps {
   readonly sources?: readonly SourceProgress[];
   /** Measured estimate, e.g. "about 6 minutes left". "" when not trustworthy. */
   readonly remaining?: string;
-  readonly variant?: "full" | "compact";
   readonly onLeave?: (() => void) | undefined;
   readonly className?: string;
 }
@@ -102,7 +101,6 @@ export function RunProgress({
   total = null,
   sources = [],
   remaining = "",
-  variant = "full",
   onLeave,
   className = "",
 }: RunProgressProps) {
@@ -127,27 +125,6 @@ export function RunProgress({
   const note = firstRun
     ? "The first search takes 10 to 20 minutes, because Cincinnatus reads each job on your own computer. After today, searches take about a minute."
     : "This usually takes about a minute.";
-
-  if (variant === "compact") {
-    return (
-      <div
-        className={["cn-run cn-run--compact", className].filter(Boolean).join(" ")}
-        role="status"
-        aria-live="polite"
-      >
-        <ProgressIndicator
-          icon="search"
-          value={percent}
-          label={HEADLINE[active]}
-          note={
-            [count, firstRun ? "You can keep using Cincinnatus while it works." : null]
-              .filter(Boolean)
-              .join(" ") || undefined
-          }
-        />
-      </div>
-    );
-  }
 
   const reached = finished ? PHASES.length : PHASES.findIndex((p) => p.id === active);
 
