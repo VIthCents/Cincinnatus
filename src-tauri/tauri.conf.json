@@ -29,7 +29,7 @@
     "targets": ["nsis", "app", "dmg"],
     "publisher": "Hawkseye Inc",
     "homepage": "https://github.com/VIthCents/Cincinnatus",
-    "copyright": "© 2026 Cincinnatus contributors. MIT license.",
+    "copyright": "Copyright (c) 2026 Cincinnatus contributors. MIT license.",
     "category": "Business",
     "shortDescription": "Helps veterans find jobs.",
     "longDescription": "A free app that helps veterans get hired. It finds real job openings, sorts them by how well they fit you, and writes a resume and cover letter for the ones you pick. Everything stays on your own computer.",
