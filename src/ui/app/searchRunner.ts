@@ -4,6 +4,7 @@ import * as repo from "../../core/db/repo.ts";
 import type { ProgressEvent } from "../../core/ports.ts";
 import { db, runSearch } from "./services.ts";
 import { plainErrorWords } from "./errorWords.ts";
+import { runAutoPrepAfterSearch } from "./autoPrepRunner.ts";
 import type { Action } from "./state.tsx";
 
 /**
@@ -17,7 +18,10 @@ let searchInFlight = false;
 
 export async function runSearchNow(
   dispatch: Dispatch<Action>,
-  options: { notify?: (newJobs: number) => void } = {},
+  options: {
+    notify?: (newJobs: number) => void;
+    notifyPrepared?: (prepared: number) => void;
+  } = {},
 ): Promise<void> {
   if (searchInFlight) return;
 
@@ -48,6 +52,15 @@ export async function runSearchNow(
       warning: sourceTroubleWords(runReport),
     });
     options.notify?.(runReport.jobsNew);
+
+    // Inside the in-flight guard so a second search cannot start on top of it,
+    // but after search_done so the list is already on screen. It contains its
+    // own errors — a failure here is not a search failure.
+    await runAutoPrepAfterSearch(dispatch, ranked, {
+      ...(options.notifyPrepared === undefined
+        ? {}
+        : { notify: options.notifyPrepared }),
+    });
   } catch (err) {
     console.error(err);
     dispatch({

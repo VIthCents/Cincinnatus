@@ -221,6 +221,26 @@ export const LLM_SCORE_MAX_TOKENS = 1500;
 export const LLM_RATIONALE_MAX_CHARS = 140;
 
 /**
+ * How many jobs a day to write papers for without being asked. Zero is off.
+ *
+ * SPEC §7 says "default 3". This ships at 0, ruled on 2026-08-14 — see
+ * DECISIONS.md. A tailored resume and cover letter together cost roughly 10 to
+ * 15 cents of the person's own prepaid credits, so three a day is about $11 a
+ * month, and the wizard tells this audience to start with $5. "Optional:
+ * auto-prep" reads as opt-in, and quietly draining a starter balance for jobs
+ * somebody never asked about is not a feature.
+ */
+export const AUTO_PREP_DEFAULT_COUNT = 0;
+
+/**
+ * How many failures end the run.
+ *
+ * One flaky job should not cost the rest. But a dead key or spent credits fails
+ * every job the same way, and paying to learn that twice is enough.
+ */
+export const AUTO_PREP_MAX_FAILURES = 2;
+
+/**
  * List prices in USD per million tokens, for the plain-language running cost
  * estimate ("AI used this month: about $1.20"). Estimates only — billing truth
  * lives in the user's Anthropic console.

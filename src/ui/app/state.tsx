@@ -104,6 +104,14 @@ export interface AppState {
    * the next launch simply asks again, and usually gets an answer.
    */
   readonly keyStoreTrouble: boolean;
+  /**
+   * True while papers are being written after a search. The search itself has
+   * finished, but another search must not start on top of it, and the button
+   * has to say so rather than looking live and doing nothing.
+   */
+  readonly autoPrepping: boolean;
+  /** Bumped whenever saved documents change, so screens can re-read them. */
+  readonly documentsVersion: number;
   readonly hidden: ReadonlySet<string>;
   /** The veteran's saved 👍/👎 per job, restored across launches. */
   readonly feedback: ReadonlyMap<string, "up" | "down">;
@@ -131,6 +139,8 @@ const initialState: AppState = {
   hasSearched: false,
   adzunaNudgeDismissed: false,
   keyStoreTrouble: false,
+  autoPrepping: false,
+  documentsVersion: 0,
   hidden: new Set(),
   feedback: new Map(),
   applications: [],
@@ -165,6 +175,9 @@ export type Action =
   | { type: "keys"; keys: { anthropic: boolean; usajobs: boolean; adzuna: boolean } }
   | { type: "adzuna_nudge_dismissed" }
   | { type: "key_trouble_dismissed" }
+  | { type: "auto_prep"; running: boolean }
+  | { type: "documents_changed" }
+  | { type: "search_warning"; message: string }
   | { type: "search_start" }
   | { type: "search_progress"; progress: SearchProgress }
   | { type: "feedback"; jobId: string; verdict: "up" | "down" | null }
@@ -233,6 +246,14 @@ export function reducer(state: AppState, action: Action): AppState {
       return { ...state, adzunaNudgeDismissed: true };
     case "key_trouble_dismissed":
       return { ...state, keyStoreTrouble: false };
+    case "auto_prep":
+      return { ...state, autoPrepping: action.running };
+    case "documents_changed":
+      // A counter rather than the set itself: whoever needs the ids re-reads
+      // them, and the screens that do not care never re-render for this.
+      return { ...state, documentsVersion: state.documentsVersion + 1 };
+    case "search_warning":
+      return { ...state, searchStatus: action.message };
     case "search_start":
       return {
         ...state,

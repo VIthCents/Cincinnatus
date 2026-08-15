@@ -2,7 +2,8 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { useEffect, useState } from "react";
 import { getMonthSpend, spendInWords } from "../../core/app/spend.ts";
 import { quotaStatus, quotaWords } from "../../core/app/quota.ts";
-import { ADZUNA_QUOTA } from "../../core/config.ts";
+import { getAutoPrepCount, setAutoPrepCount } from "../../core/app/autoprep.ts";
+import { ADZUNA_QUOTA, AUTO_PREP_DEFAULT_COUNT } from "../../core/config.ts";
 import {
   DEFAULT_INTERVAL_HOURS,
   getIntervalHours,
@@ -81,10 +82,12 @@ export function SettingsTab() {
 
   const [spend, setSpend] = useState<string>("");
   const [interval, setInterval_] = useState<number>(DEFAULT_INTERVAL_HOURS);
+  const [autoPrep, setAutoPrep] = useState<number>(AUTO_PREP_DEFAULT_COUNT);
 
   useEffect(() => {
     void getMonthSpend(db, tauriClock.now()).then((usd) => setSpend(spendInWords(usd)));
     void getIntervalHours(db).then(setInterval_);
+    void getAutoPrepCount(db).then(setAutoPrep);
   }, []);
 
   useEffect(() => {
@@ -167,6 +170,34 @@ export function SettingsTab() {
               { value: "0", label: "Do not search on a schedule" },
             ]}
           />
+        </SettingsRow>
+      </section>
+
+      <section className="set">
+        <h3>Papers made ahead of time</h3>
+        <SettingsRow
+          title="Write papers for my best new jobs"
+          description="After a search, Cincinnatus can write a resume and cover letter for your strongest new matches, before you ask. Each job uses about 10 to 15 cents of your AI credits."
+        >
+          {state.keys.anthropic ? (
+            <SelectField
+              label="How many a day"
+              value={String(autoPrep)}
+              onChange={(next) => {
+                const count = Number(next);
+                setAutoPrep(count);
+                void setAutoPrepCount(db, count);
+              }}
+              options={[
+                { value: "0", label: "Off — I pick jobs myself" },
+                { value: "1", label: "1 job a day" },
+                { value: "3", label: "3 jobs a day" },
+                { value: "5", label: "5 jobs a day" },
+              ]}
+            />
+          ) : (
+            <p className="prose--muted">This needs your AI access key first.</p>
+          )}
         </SettingsRow>
       </section>
 

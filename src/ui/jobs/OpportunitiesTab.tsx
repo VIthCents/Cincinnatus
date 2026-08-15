@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import type { RankedJob } from "../../core/types.ts";
+import type { Job, RankedJob } from "../../core/types.ts";
 import * as repo from "../../core/db/repo.ts";
 
 import { tauriClock } from "../../tauri/clock.ts";
@@ -11,6 +11,7 @@ import { runSearchNow } from "../app/searchRunner.ts";
 import { ageWords, matchLevel, salaryWords, whyWords } from "../app/format.ts";
 import { useAppDispatch, useAppState } from "../app/state.tsx";
 import { PrepareDialog } from "./PrepareDialog.tsx";
+import { SavedDocuments } from "../documents/SavedDocuments.tsx";
 import { MatchBadge } from "./MatchBadge.tsx";
 import { Icon } from "../components/Icon.tsx";
 import { RunProgress } from "../components/RunProgress.tsx";
@@ -53,7 +54,19 @@ export function OpportunitiesTab() {
     strongish: false,
   });
   const [preparing, setPreparing] = useState<RankedJob | null>(null);
+  const [showingPapers, setShowingPapers] = useState<Job | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
+  // Which jobs already have papers saved. Re-read whenever documents change —
+  // after PrepareDialog saves, and after auto-prep finishes in the background.
+  const [withDocuments, setWithDocuments] = useState<ReadonlySet<string>>(new Set());
+
+  useEffect(() => {
+    void repo.listJobIdsWithDocuments(db).then(setWithDocuments, (err: unknown) => {
+      // Same treatment as the applications tab: the cards simply offer Prepare
+      // rather than pretending nothing was ever written.
+      console.error(err);
+    });
+  }, [state.documentsVersion]);
   const [shown, setShown] = useState(25);
   // The one job whose posting was just opened, and which is therefore being
   // asked "did you apply?". Deliberately not persisted: an unanswered question
@@ -83,13 +96,20 @@ export function OpportunitiesTab() {
     <div className="screen">
       <div className="screen__head">
         <h2 className="screen__title">Jobs for you</h2>
+        {/* Also disabled while papers are being written. The search itself has
+            finished by then, but the runner is still holding the lock, so a
+            live-looking button would silently do nothing for a minute or two. */}
         <PrimaryButton
           icon="refresh"
-          disabled={state.searching}
-          loading={state.searching}
+          disabled={state.searching || state.autoPrepping}
+          loading={state.searching || state.autoPrepping}
           onClick={() => void runSearchNow(dispatch)}
         >
-          {state.searching ? "Looking now" : "Search now"}
+          {state.searching
+            ? "Looking now"
+            : state.autoPrepping
+              ? "Writing your papers"
+              : "Search now"}
         </PrimaryButton>
       </div>
 
@@ -269,6 +289,8 @@ export function OpportunitiesTab() {
                 setExpanded(expanded === ranked.job.id ? null : ranked.job.id)
               }
               onPrepare={() => setPreparing(ranked)}
+              hasDocuments={withDocuments.has(ranked.job.id)}
+              onShowDocuments={() => setShowingPapers(ranked.job)}
             />
           ))}
         </ul>
@@ -286,7 +308,19 @@ export function OpportunitiesTab() {
         <PrepareGate
           ranked={preparing}
           onApplyOpened={() => setAsked(preparing.job.id)}
-          onClose={() => setPreparing(null)}
+          onClose={() => {
+            setPreparing(null);
+            // Papers may have just been written for this job.
+            dispatch({ type: "documents_changed" });
+          }}
+        />
+      )}
+
+      {showingPapers !== null && (
+        <SavedDocuments
+          job={showingPapers}
+          baseResume={state.resume}
+          onClose={() => setShowingPapers(null)}
         />
       )}
     </div>
@@ -365,6 +399,8 @@ function JobCard({
   onDismissAsk,
   onToggle,
   onPrepare,
+  hasDocuments,
+  onShowDocuments,
 }: {
   ranked: RankedJob;
   expanded: boolean;
@@ -374,6 +410,8 @@ function JobCard({
   onDismissAsk: () => void;
   onToggle: () => void;
   onPrepare: () => void;
+  hasDocuments: boolean;
+  onShowDocuments: () => void;
 }) {
   const state = useAppState();
   const dispatch = useAppDispatch();
@@ -566,10 +604,36 @@ function JobCard({
       )}
 
       <div className="cn-jobcard__foot">
-        {/* With no AI key there is no Prepare — a disabled primary button is a
-            nag drawn permanently. Apply is promoted instead
-            (guidelines/matching.md). */}
-        {aiConnected ? (
+        {/* Papers already exist for this job — auto-prep may have written them
+            overnight. Reopening them costs nothing, so this is offered with or
+            without a key: losing sight of work already paid for because a key
+            was removed would be its own small betrayal. It also replaces
+            Prepare, which regenerates and re-charges on every open. */}
+        {hasDocuments ? (
+          <>
+            <Button
+              variant="primary"
+              size="md"
+              icon="description"
+              onClick={onShowDocuments}
+              ariaLabel={`See the papers for ${where}`}
+            >
+              See your papers
+            </Button>
+            <Button
+              variant="secondary"
+              size="md"
+              iconEnd="open_in_new"
+              onClick={apply}
+              ariaLabel={applyDestination}
+            >
+              Apply
+            </Button>
+          </>
+        ) : /* With no AI key there is no Prepare — a disabled primary button is
+             a nag drawn permanently. Apply is promoted instead
+             (guidelines/matching.md). */
+        aiConnected ? (
           <>
             <Button
               variant="primary"

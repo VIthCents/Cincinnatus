@@ -45,22 +45,41 @@ export default function App() {
   );
 }
 
+async function notifyPreparedPapers(count: number): Promise<void> {
+  if (count <= 0) return;
+  if (!(await ensureNotifyAllowed())) return;
+  sendNotification({
+    title: "Cincinnatus",
+    body:
+      count === 1
+        ? "Wrote papers for 1 job that fits you. Open the app to look them over."
+        : `Wrote papers for ${String(count)} jobs that fit you. Open the app to look them over.`,
+  });
+}
+
+async function ensureNotifyAllowed(): Promise<boolean> {
+  let granted = await isPermissionGranted();
+  if (!granted) granted = (await requestPermission()) === "granted";
+  return granted;
+}
+
 async function notifyNewJobs(count: number): Promise<void> {
   if (count <= 0) return;
-  let granted = await isPermissionGranted();
-  if (!granted) {
-    granted = (await requestPermission()) === "granted";
-  }
-  if (granted) {
-    sendNotification({
-      title: "Cincinnatus",
-      body:
-        count === 1
-          ? "Found 1 new job that fits you."
-          : `Found ${count} new jobs that fit you.`,
-    });
-  }
+  if (!(await ensureNotifyAllowed())) return;
+  sendNotification({
+    title: "Cincinnatus",
+    body:
+      count === 1
+        ? "Found 1 new job that fits you."
+        : `Found ${String(count)} new jobs that fit you.`,
+  });
 }
+
+/** Every search entry point notifies the same way. */
+const NOTIFY = {
+  notify: (n: number) => void notifyNewJobs(n),
+  notifyPrepared: (n: number) => void notifyPreparedPapers(n),
+};
 
 function Shell() {
   const state = useAppState();
@@ -83,20 +102,20 @@ function Shell() {
 
     const unlistenSearch = listen("search-now", () => {
       dispatch({ type: "tab", tab: "jobs" });
-      void runSearchNow(dispatch, { notify: (n) => void notifyNewJobs(n) });
+      void runSearchNow(dispatch, NOTIFY);
     });
 
     const unlistenTick = listen("scheduler-tick", () => {
       void isScheduledSearchDue(db, tauriClock.now()).then((due) => {
         if (due) {
-          void runSearchNow(dispatch, { notify: (n) => void notifyNewJobs(n) });
+          void runSearchNow(dispatch, NOTIFY);
         }
       });
     });
 
     // On-launch search, if one is due (SPEC §5: every 6 hours + on launch).
     void isScheduledSearchDue(db, tauriClock.now()).then((due) => {
-      if (due) void runSearchNow(dispatch);
+      if (due) void runSearchNow(dispatch, NOTIFY);
     });
 
     return () => {

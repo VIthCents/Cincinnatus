@@ -1527,23 +1527,23 @@ written. The user ruled on 2026-08-14 to build it rather than retire it.
 
 **Decision.** A scoring stage in `runPipeline`, after the first rank pass, behind `RunOptions.llm`.
 
-*What "new" means.* Not "first seen this run" — **not yet judged for this profile and this job text**.
+_What "new" means._ Not "first seen this run" — **not yet judged for this profile and this job text**.
 Walking the ranked list means connecting a key judges the existing top 30 immediately, rather than
 leaving the list looking untouched until new jobs happen to arrive. Hidden jobs are never sent: they
 cost money and the person has already said no.
 
-*Invalidation needs two hashes, not one.* `profile_hash` covers the person plus the prompt version, so
+_Invalidation needs two hashes, not one._ `profile_hash` covers the person plus the prompt version, so
 re-parsing a resume retires every judgement made about the older reading of them. `content_hash`
 covers the job — the same embed hash the vector is keyed by. Job rows are upserted on every fetch, so
 a re-served advert or an edited posting changes the very text a score was formed from; without this
 the embedding would correctly re-embed while the score and its rationale stayed behind, describing
 text nobody can see any more. A score is used only when both match.
 
-*Embed rows are still never written to `scores`.* An embedding fit is recomputed from stored vectors
+_Embed rows are still never written to `scores`._ An embedding fit is recomputed from stored vectors
 in milliseconds on every rank; persisting thousands per run would be write churn with no reader. LLM
 scores are different because they cost the person money.
 
-*The merge, and the one place it must not reach.* An LLM fit replaces the embedding fit for the
+_The merge, and the one place it must not reach._ An LLM fit replaces the embedding fit for the
 order, the badge, and the filters — the prompt is written to the same measured bands, so it is
 answering the question the badge words claim to answer. **But the widening decision keeps reading the
 embedding fit.** Only the top ~30 jobs are ever scored, and those are exactly the ones most likely to
@@ -1552,14 +1552,14 @@ was plenty of work nearby and collapse the nationwide list — for someone whose
 changed at all. "How much real work is near this person" is a question about the corpus and must be
 answered identically with or without a key. A test breaks if anyone reaches for the merged value.
 
-*Failure is not a dead end.* `scoreJobs` never throws. A failed batch ends the pass — the realistic
+_Failure is not a dead end._ `scoreJobs` never throws. A failed batch ends the pass — the realistic
 causes are an invalid key and exhausted credits, neither of which improves on a retry — keeps
 everything already judged and persisted, and returns plain words. Scores are saved per batch, the
 same crash-safety the embedding loop already has. The note is deliberately not shown on screen: the
 ranked list is complete and useful either way, and a banner about a feature that silently improved
 nothing is noise.
 
-*Cost.* About $0.019 for a full 30-job pass at Haiku list prices; steady-state runs score only new
+_Cost._ About $0.019 for a full 30-job pass at Haiku list prices; steady-state runs score only new
 arrivals. Spend recording needed no wiring — `getLlm()` already wraps every call.
 
 **Consequence.** The golden sets stay a measurement of the embedding path alone: `rankJobs` takes
@@ -1573,3 +1573,50 @@ judges' 60 meant is unverified. A labelled stratum is the path to ever gating on
 
 `SCORE_PROMPT_VERSION` is part of the profile hash, so any change to the prompt — including a band
 retune, since the bands are interpolated into it — retires the scores judged under the old wording.
+
+---
+
+## 2026-08-14 — Auto-prep ships off, against SPEC's "default 3"
+
+**Context.** SPEC §7 offers "auto-prep the top N (default 3, configurable) daily matches" and §8
+lists an auto-prep count in Settings. Neither existed. The user ruled on 2026-08-14 to build it.
+
+**Decision.** Built, and **`AUTO_PREP_DEFAULT_COUNT = 0`** — off until the person turns it on.
+
+The arithmetic is the argument. A tailored resume and a cover letter together cost roughly 10 to 15
+cents of the veteran's own prepaid credits. Three a day is about $11 a month. The wizard tells this
+audience to start with about $5 of credits, so SPEC's default would drain a starter balance in under
+a fortnight, on jobs nobody asked about, for someone who may not connect the two events at all.
+
+"Optional: auto-prep" reads as opt-in, and an app that spends a person's money before being asked has
+to be very sure it is welcome. Settings names the cost in the description rather than burying it.
+
+Everything else follows SPEC. Once per UTC day at most, however many searches run. Only jobs the
+badge already calls a **strong** match — spending unasked on "worth a look" is not a favour, and the
+badge is the one judgement this app has actually measured. Jobs already documented, hidden, or
+applied to are skipped.
+
+Three rules that are about damage rather than features:
+
+- **The day is marked before the work, not after.** A dead key fails every job identically; without
+  this, every later search that day would pay to rediscover that.
+- **Both documents or neither.** `listJobIdsWithDocuments` counts any document at all, so saving a
+  lone resume after the letter failed would mark that job finished forever and nothing would return
+  to write the letter. A job whose letter fails counts as that job's failure, with nothing saved.
+- **Two failures end the run.** One flaky job should not cost the rest; a dead key or spent credits
+  fails identically every time, and paying to learn that twice is enough.
+
+**Consequence.** Papers can now exist before a human has seen them, so the no-fabrication findings
+are **recomputed when the documents are opened** rather than stored. That is strictly better: they
+are checked against the base resume as it stands at the moment somebody can act on them, not as it
+stood overnight when the papers were written. `SavedDocuments` moves to `src/ui/documents/` and both
+tabs use it, so the applications tab gains those findings too — it had been showing none.
+
+A job with papers now offers "See your papers" instead of "Prepare my application", in both the
+keyed and keyless layouts. Reopening costs nothing, so losing sight of work already paid for because
+a key was removed would be its own small betrayal — and it closes a real footgun, since PrepareDialog
+regenerates and re-charges on every open.
+
+The Search button stays disabled, saying "Writing your papers", while this runs. The search has
+finished by then but the runner still holds the lock, and a live-looking button that silently does
+nothing for two minutes is worse than an honest one.
