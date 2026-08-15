@@ -7,7 +7,7 @@ import type { Db, SqlValue } from "../core/ports.ts";
  * Core writes SQL with `?` placeholders; plugin-sql's sqlite dialect wants
  * $1/$2. The rewrite is a plain left-to-right substitution, which is safe
  * because repo.ts never puts a literal question mark inside a SQL string — and
- * tests/tauriDb.test.ts pins that rewrite so a future literal `?` breaks loudly.
+ * tests/app.test.ts pins that rewrite so a future literal `?` breaks loudly.
  *
  * What this adapter must NOT do (verified limits, see docs/DECISIONS.md):
  *  - No BLOBs. plugin-sql cannot bind binary; embeddings are base64 TEXT.

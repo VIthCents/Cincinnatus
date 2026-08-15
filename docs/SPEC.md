@@ -1,16 +1,26 @@
 # CINCINNATUS — Specification
 
-> This is the authoritative specification. Where implementation has had to depart from it — because a
-> pinned version moved, or an endpoint behaves differently than documented — the departure is recorded
-> as a dated entry in [DECISIONS.md](./DECISIONS.md) with the evidence. The SPEC text itself is left
-> unedited so the two can be compared.
+> This is the authoritative specification, and it is amended in exactly one circumstance.
+>
+> **Drift never edits it.** Where implementation departed because a pinned version moved, an endpoint
+> behaves differently than documented, or a measurement came back other than expected, the departure
+> is a dated entry in [DECISIONS.md](./DECISIONS.md) with the evidence, and the SPEC text stands
+> unchanged so the two can be compared. React 18 vs 19, `better-sqlite3` vs `node:sqlite`, the model
+> ids, "unsigned artifacts for now", the updater — all of those live in DECISIONS, not here.
+>
+> **A ruled change of scope amends it.** When the product itself is decided to be different — a
+> source removed, a tab added — leaving the specification describing an app that no longer exists
+> makes it useless as the thing a reader trusts. Those edits happen only under a dated DECISIONS
+> entry recording the ruling, and this document names which entry.
+>
+> Policy made explicit 2026-08-14, after both kinds had already happened.
 
 ---
 
 ## 0. What you are building
 
 A **free, open-source (MIT), local-first native desktop app** (Windows + macOS) that helps veterans —
-including users with very low tech literacy — get hired. Two tabs:
+including users with very low tech literacy — get hired. Three tabs:
 
 1. **Chat** — the veteran talks to Cincinnatus. They upload a resume; the agent gives honest, critical
    analysis and feedback, works through revisions conversationally, and produces a final professional
@@ -19,6 +29,10 @@ including users with very low tech literacy — get hired. Two tabs:
    ordered by a blend of **best match × most recently posted** (one score, one list). Each job has one big
    button — **"Prepare my application"** — that generates a tailored resume and cover letter as clean,
    portal-ready DOCX/PDF. Apply opens the posting in the browser; the human applies.
+3. **My applications** — the jobs the veteran said they applied to, and where each one stands. Nothing
+   is inferred: a row exists only because they answered "Yes, I applied". It records; it never chases
+   — no reminders, no follow-up nagging — and it needs no keys, because remembering what you sent is
+   not an AI feature. _(Amended from two tabs per the 2026-08-11 ruling in DECISIONS.md.)_
 
 No server. No accounts. One binary + SQLite. Everything sensitive stays on the machine.
 
@@ -65,7 +79,7 @@ Mirror constraints 1–7 into `CLAUDE.md` (§11) so they survive context resets.
 | Layer            | Choice                                                                                           | Notes                                                                                                                                                                                                                                           |
 | ---------------- | ------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Shell            | **Tauri v2**                                                                                     | Tray, notifications, single-instance, opener plugin; updater config stubbed (signing: §9 Phase 4)                                                                                                                                               |
-| UI               | **React 18 + TypeScript + Vite + Tailwind**                                                      | Two tabs + first-run wizard (§8)                                                                                                                                                                                                                |
+| UI               | **React 18 + TypeScript + Vite + Tailwind**                                                      | Three tabs + first-run wizard (§8)                                                                                                                                                                                                              |
 | Agent core       | **Pure TypeScript in `src/core/`**                                                               | Zero Tauri/DOM imports — runs headless via CLI harness and in vitest                                                                                                                                                                            |
 | DB               | **SQLite** via `@tauri-apps/plugin-sql` in-app; `better-sqlite3` for harness/tests               | Hand-written SQL, thin repo module                                                                                                                                                                                                              |
 | Embeddings       | **transformers.js**, model `Xenova/all-MiniLM-L6-v2`, WASM                                       | Cached locally on first run; CPU is fine                                                                                                                                                                                                        |
@@ -219,7 +233,13 @@ generated.
 posted-age, plain-language match badge ("Strong match"), one-line why. Buttons: **Prepare my application**
 (→ tailored resume + cover letter → review side-by-side, entity-check flags surfaced as simple
 confirmations → Save/Print) · **Apply** (opens browser) · 👍/👎/Hide. Filters minimal: Remote only ·
-Federal only · Hide low matches.
+Federal only · Hide low matches. A job that already has papers offers **See your papers** in place of
+Prepare, with or without a key: reopening what was already made costs nothing.
+
+**My applications tab:** the jobs the veteran told us they applied to, newest first, each with a status
+they can move (applied · heard back · interview · offer · not this one) and a way back to the posting
+and to the papers. Nothing is inferred from a click on Apply. It records; it never chases. Works with
+zero keys. _(Amended per the 2026-08-11 ruling in DECISIONS.md.)_
 
 **Settings (gear icon, one simple page):** AI key paste box (validate + green check), USAJobs key, optional
 sources (each with a plain-words signup guide), search schedule, auto-prep count, plain-language AI spend
