@@ -3,6 +3,8 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { nodeHttp } from "../src/node/http.ts";
+import { buildAdzunaSearchUrl } from "../src/core/sources/adzuna.ts";
+import { loadDotEnv } from "../src/node/env.ts";
 
 /**
  * Record real API responses as test fixtures.
@@ -125,6 +127,56 @@ async function captureAshby(): Promise<void> {
   });
 }
 
+async function captureAdzuna(): Promise<void> {
+  process.stdout.write("Adzuna:\n");
+
+  const appId = process.env["ADZUNA_APP_ID"];
+  const appKey = process.env["ADZUNA_APP_KEY"];
+  if (appId === undefined || appId === "" || appKey === undefined || appKey === "") {
+    process.stdout.write("  skipped (ADZUNA_APP_ID / ADZUNA_APP_KEY not set)\n");
+    return;
+  }
+
+  const search = await nodeHttp.get({
+    url: buildAdzunaSearchUrl(
+      {
+        auth: { appId, appKey },
+        keywords: ["truck driver"],
+        locationName: "Fayetteville, NC",
+        radiusMiles: 50,
+      },
+      "truck driver",
+      1,
+    ),
+  });
+  // Adzuna puts the app_id back INSIDE the response: every redirect_url carries
+  // it as `utm_source`. So a recorded body is not credential-free just because
+  // the credentials went out in the query string — found by scanning a fixture
+  // that was about to be committed to a public repository.
+  const scrubbed = search.body.split(appId).join("APP-ID-REDACTED");
+  const body = JSON.parse(scrubbed) as { results?: unknown[] };
+  save("adzuna/search.json", { ...body, results: (body.results ?? []).slice(0, 8) });
+
+  // A refused key. Adzuna answers 401 with its own JSON shape, and the
+  // plain-words path for it should be testable without a live bad request.
+  const unauthorized = await nodeHttp.get({
+    url: buildAdzunaSearchUrl(
+      {
+        auth: { appId: "not-a-real-id", appKey: "not-a-real-key" },
+        keywords: ["truck driver"],
+        locationName: "Fayetteville, NC",
+        radiusMiles: 50,
+      },
+      "truck driver",
+      1,
+    ),
+  });
+  save("adzuna/search-401.json", {
+    status: unauthorized.status,
+    body: unauthorized.body.slice(0, 500),
+  });
+}
+
 async function captureUsaJobs(): Promise<void> {
   const key = process.env["USAJOBS_API_KEY"];
   const agent = process.env["USAJOBS_USER_AGENT"];
@@ -171,9 +223,11 @@ async function captureUsaJobs(): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  loadDotEnv();
   await captureGreenhouse();
   await captureLever();
   await captureAshby();
+  await captureAdzuna();
   await captureUsaJobs();
   process.stdout.write("\nDone. Read the diff before committing.\n");
 }

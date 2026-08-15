@@ -1,0 +1,4 @@
+{
+  "status": 401,
+  "body": "{\"exception\":\"AUTH_FAIL\",\"__CLASS__\":\"Adzuna::API::Response::Exception\",\"display\":\"Authorisation failed\",\"doc\":\"https://api.adzuna.com/v1/doc\"}"
+}

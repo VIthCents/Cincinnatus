@@ -161,6 +161,17 @@ export function createAdzunaSource(options: AdzunaOptions): Source {
               stopped = true;
               break;
             }
+            // An HttpStatusError is rethrown intact. It is built from the
+            // label, the status and a body snippet — never the URL — so it
+            // carries no credentials, and wrapping it in a plain Error threw
+            // away the type toPlainMessage needs. That is not cosmetic: a
+            // refused key stopped saying "Adzuna would not accept our key" and
+            // started showing the veteran raw {"exception":"AUTH_FAIL"} JSON.
+            //
+            // Everything else still gets redacted, because a network error's
+            // message can quote the whole URL, and Adzuna's credentials live
+            // in the query string.
+            if (err instanceof HttpStatusError) throw err;
             throw new Error(redactCredentials(String(err)), { cause: err });
           }
 

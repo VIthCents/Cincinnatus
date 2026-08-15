@@ -1,0 +1,239 @@
+{
+  "__CLASS__": "Adzuna::API::Response::JobSearchResults",
+  "count": 5585,
+  "mean": 94880.32,
+  "results": [
+    {
+      "description": "Take your CDL-A career further! Our drivers work hard to move, supply, and provide for America's favorite brands. Being reliable and dedicated to safety has defined our success as an industry leader for 130 years. Join McLane and discover the driving difference-we provide you with industry-leading pay, strong and secure client relationships, and get you home safely and more often. That's why our drivers build long-lasting careers with us. ARE YOU APPLYING FOR THE CORRECT LOCATION AND POSITION??…",
+      "company": {
+        "display_name": "Mclane Company, Inc.",
+        "__CLASS__": "Adzuna::API::Response::Company"
+      },
+      "adref": "eyJhbGciOiJIUzI1NiJ9.eyJzIjoiSXJ4WWdXYVk4UkdYbHVhMHdpMjNyZyIsImkiOiI1ODE5MTU5MjA0In0.3PGI5eQWNbkOxa1HAgti5hzg27E0Hl-oMpc30jUrDTE",
+      "salary_max": 62666.89,
+      "longitude": -78.204164,
+      "redirect_url": "https://www.adzuna.com/land/ad/5819159204?se=IrxYgWaY8RGXlua0wi23rg&utm_medium=api&utm_source=APP-ID-REDACTED&v=AAACBCD778CD8B60C1796DD586A705CB62CAAF7F",
+      "__CLASS__": "Adzuna::API::Response::Job",
+      "created": "2026-07-28T21:52:17Z",
+      "title": "CDL A Delivery Truck Driver",
+      "location": {
+        "area": ["US", "North Carolina", "Johnston County", "Micro"],
+        "display_name": "Micro, Johnston County",
+        "__CLASS__": "Adzuna::API::Response::Location"
+      },
+      "id": "5819159204",
+      "latitude": 35.562643,
+      "salary_is_predicted": "1",
+      "salary_min": 62666.89,
+      "category": {
+        "tag": "logistics-warehouse-jobs",
+        "__CLASS__": "Adzuna::API::Response::Category",
+        "label": "Logistics & Warehouse Jobs"
+      },
+      "contract_time": "full_time"
+    },
+    {
+      "redirect_url": "https://www.adzuna.com/land/ad/5819159203?se=IrxYgWaY8RGXlua0wi23rg&utm_medium=api&utm_source=APP-ID-REDACTED&v=1DDCC22BC9682B5384EFE921F3AA3709EB2F8109",
+      "longitude": -77.70186,
+      "__CLASS__": "Adzuna::API::Response::Job",
+      "salary_max": 58870.15,
+      "description": "Take your CDL-A career further! Our drivers work hard to move, supply, and provide for America's favorite brands. Being reliable and dedicated to safety has defined our success as an industry leader for 130 years. Join McLane and discover the driving difference-we provide you with industry-leading pay, strong and secure client relationships, and get you home safely and more often. That's why our drivers build long-lasting careers with us. ARE YOU APPLYING FOR THE CORRECT LOCATION AND POSITION??…",
+      "company": {
+        "display_name": "Mclane Company, Inc.",
+        "__CLASS__": "Adzuna::API::Response::Company"
+      },
+      "adref": "eyJhbGciOiJIUzI1NiJ9.eyJpIjoiNTgxOTE1OTIwMyIsInMiOiJJcnhZZ1dhWThSR1hsdWEwd2kyM3JnIn0.CO5sQaaaVnMYu4FGWCmkGmuDfKCK25OXFoHfz7BS8mY",
+      "salary_is_predicted": "1",
+      "latitude": 35.595319,
+      "contract_time": "full_time",
+      "category": {
+        "tag": "logistics-warehouse-jobs",
+        "label": "Logistics & Warehouse Jobs",
+        "__CLASS__": "Adzuna::API::Response::Category"
+      },
+      "salary_min": 58870.15,
+      "title": "CDL A Delivery Truck Driver",
+      "created": "2026-07-28T21:52:17Z",
+      "location": {
+        "__CLASS__": "Adzuna::API::Response::Location",
+        "display_name": "Walstonburg, Greene County",
+        "area": ["US", "North Carolina", "Greene County", "Walstonburg"]
+      },
+      "id": "5819159203"
+    },
+    {
+      "id": "5819159194",
+      "location": {
+        "area": ["US", "North Carolina", "Wilson County", "Lucama"],
+        "__CLASS__": "Adzuna::API::Response::Location",
+        "display_name": "Lucama, Wilson County"
+      },
+      "created": "2026-07-28T21:52:17Z",
+      "title": "CDL A Delivery Truck Driver",
+      "salary_min": 61774.28,
+      "category": {
+        "tag": "logistics-warehouse-jobs",
+        "label": "Logistics & Warehouse Jobs",
+        "__CLASS__": "Adzuna::API::Response::Category"
+      },
+      "contract_time": "full_time",
+      "latitude": 35.639982,
+      "salary_is_predicted": "1",
+      "adref": "eyJhbGciOiJIUzI1NiJ9.eyJpIjoiNTgxOTE1OTE5NCIsInMiOiJJcnhZZ1dhWThSR1hsdWEwd2kyM3JnIn0.N6309EnlTS6H2FU4YtbkDmNaCKn4CDUAX4V3wIXok7w",
+      "company": {
+        "__CLASS__": "Adzuna::API::Response::Company",
+        "display_name": "Mclane Company, Inc."
+      },
+      "description": "Take your CDL-A career further! Our drivers work hard to move, supply, and provide for America's favorite brands. Being reliable and dedicated to safety has defined our success as an industry leader for 130 years. Join McLane and discover the driving difference-we provide you with industry-leading pay, strong and secure client relationships, and get you home safely and more often. That's why our drivers build long-lasting careers with us. ARE YOU APPLYING FOR THE CORRECT LOCATION AND POSITION??…",
+      "salary_max": 61774.28,
+      "__CLASS__": "Adzuna::API::Response::Job",
+      "redirect_url": "https://www.adzuna.com/land/ad/5819159194?se=IrxYgWaY8RGXlua0wi23rg&utm_medium=api&utm_source=APP-ID-REDACTED&v=1CA2CFB536DEE3791D75300CFC1FE431BD5E983A",
+      "longitude": -78.024432
+    },
+    {
+      "company": {
+        "__CLASS__": "Adzuna::API::Response::Company",
+        "display_name": "Mclane Company, Inc."
+      },
+      "description": "Take your CDL-A career further! Our drivers work hard to move, supply, and provide for America's favorite brands. Being reliable and dedicated to safety has defined our success as an industry leader for 130 years. Join McLane and discover the driving difference-we provide you with industry-leading pay, strong and secure client relationships, and get you home safely and more often. That's why our drivers build long-lasting careers with us. ARE YOU APPLYING FOR THE CORRECT LOCATION AND POSITION??…",
+      "adref": "eyJhbGciOiJIUzI1NiJ9.eyJzIjoiSXJ4WWdXYVk4UkdYbHVhMHdpMjNyZyIsImkiOiI1ODE5MTU5MjAyIn0.6b_b_Q-Ev3edyQIyenVzPhCkjWNZok4vlLid73hV0GU",
+      "salary_max": 56856.08,
+      "redirect_url": "https://www.adzuna.com/land/ad/5819159202?se=IrxYgWaY8RGXlua0wi23rg&utm_medium=api&utm_source=APP-ID-REDACTED&v=FE9E403A3FF86C5223A3E9EDA979579C9D7EF6F0",
+      "longitude": -77.772282,
+      "__CLASS__": "Adzuna::API::Response::Job",
+      "created": "2026-07-28T21:52:17Z",
+      "title": "CDL A Delivery Truck Driver",
+      "location": {
+        "__CLASS__": "Adzuna::API::Response::Location",
+        "display_name": "Saratoga, Wilson County",
+        "area": ["US", "North Carolina", "Wilson County", "Saratoga"]
+      },
+      "id": "5819159202",
+      "latitude": 35.655605,
+      "salary_is_predicted": "1",
+      "salary_min": 56856.08,
+      "contract_time": "full_time",
+      "category": {
+        "__CLASS__": "Adzuna::API::Response::Category",
+        "label": "Logistics & Warehouse Jobs",
+        "tag": "logistics-warehouse-jobs"
+      }
+    },
+    {
+      "adref": "eyJhbGciOiJIUzI1NiJ9.eyJzIjoiSXJ4WWdXYVk4UkdYbHVhMHdpMjNyZyIsImkiOiI1ODE5MTU5MTc2In0.215-hhWWg5OyVAj8WgwrHjE6hhQsU5kSkxwZe2jNCH8",
+      "company": {
+        "__CLASS__": "Adzuna::API::Response::Company",
+        "display_name": "Mclane Company, Inc."
+      },
+      "description": "Take your CDL-A career further! Our drivers work hard to move, supply, and provide for America's favorite brands. Being reliable and dedicated to safety has defined our success as an industry leader for 130 years. Join McLane and discover the driving difference-we provide you with industry-leading pay, strong and secure client relationships, and get you home safely and more often. That's why our drivers build long-lasting careers with us. ARE YOU APPLYING FOR THE CORRECT LOCATION AND POSITION??…",
+      "redirect_url": "https://www.adzuna.com/land/ad/5819159176?se=IrxYgWaY8RGXlua0wi23rg&utm_medium=api&utm_source=APP-ID-REDACTED&v=B51A632C9CC5EA02609689391AB98A7BC0B6C1D9",
+      "longitude": -78.116453,
+      "__CLASS__": "Adzuna::API::Response::Job",
+      "salary_max": 58198.66,
+      "location": {
+        "area": ["US", "North Carolina", "Nash County", "Spring Hope"],
+        "__CLASS__": "Adzuna::API::Response::Location",
+        "display_name": "Spring Hope, Nash County"
+      },
+      "id": "5819159176",
+      "title": "CDL A Delivery Truck Driver",
+      "created": "2026-07-28T21:52:17Z",
+      "category": {
+        "label": "Logistics & Warehouse Jobs",
+        "__CLASS__": "Adzuna::API::Response::Category",
+        "tag": "logistics-warehouse-jobs"
+      },
+      "contract_time": "full_time",
+      "salary_min": 58198.66,
+      "salary_is_predicted": "1",
+      "latitude": 35.937032
+    },
+    {
+      "description": "Take your CDL-A career further! Our drivers work hard to move, supply, and provide for America's favorite brands. Being reliable and dedicated to safety has defined our success as an industry leader for 130 years. Join McLane and discover the driving difference-we provide you with industry-leading pay, strong and secure client relationships, and get you home safely and more often. That's why our drivers build long-lasting careers with us. ARE YOU APPLYING FOR THE CORRECT LOCATION AND POSITION??…",
+      "company": {
+        "display_name": "Mclane Company, Inc.",
+        "__CLASS__": "Adzuna::API::Response::Company"
+      },
+      "adref": "eyJhbGciOiJIUzI1NiJ9.eyJpIjoiNTgxOTE1OTE4NSIsInMiOiJJcnhZZ1dhWThSR1hsdWEwd2kyM3JnIn0.bD2Zc593_LMugvSOf0e70swu6Hy510iBA7rYmKR-37s",
+      "salary_max": 60979.46,
+      "__CLASS__": "Adzuna::API::Response::Job",
+      "redirect_url": "https://www.adzuna.com/land/ad/5819159185?se=IrxYgWaY8RGXlua0wi23rg&utm_medium=api&utm_source=APP-ID-REDACTED&v=70D31F057422BE74E6D055E24F5C196E854F9366",
+      "longitude": -78.13751,
+      "created": "2026-07-28T21:52:17Z",
+      "title": "CDL A Delivery Truck Driver",
+      "id": "5819159185",
+      "location": {
+        "area": ["US", "North Carolina", "Johnston County", "Kenly"],
+        "display_name": "Kenly, Johnston County",
+        "__CLASS__": "Adzuna::API::Response::Location"
+      },
+      "latitude": 35.612889,
+      "salary_is_predicted": "1",
+      "salary_min": 60979.46,
+      "contract_time": "full_time",
+      "category": {
+        "tag": "logistics-warehouse-jobs",
+        "__CLASS__": "Adzuna::API::Response::Category",
+        "label": "Logistics & Warehouse Jobs"
+      }
+    },
+    {
+      "adref": "eyJhbGciOiJIUzI1NiJ9.eyJzIjoiSXJ4WWdXYVk4UkdYbHVhMHdpMjNyZyIsImkiOiI1ODE5MTU5MjA5In0.P7Ft39umJ4b-ecZwTI9RDL6-3TOvTBbbxbr1zVZkNII",
+      "description": "Take your CDL-A career further! Our drivers work hard to move, supply, and provide for America's favorite brands. Being reliable and dedicated to safety has defined our success as an industry leader for 130 years. Join McLane and discover the driving difference-we provide you with industry-leading pay, strong and secure client relationships, and get you home safely and more often. That's why our drivers build long-lasting careers with us. ARE YOU APPLYING FOR THE CORRECT LOCATION AND POSITION??…",
+      "company": {
+        "display_name": "Mclane Company, Inc.",
+        "__CLASS__": "Adzuna::API::Response::Company"
+      },
+      "longitude": -78.093337,
+      "redirect_url": "https://www.adzuna.com/land/ad/5819159209?se=IrxYgWaY8RGXlua0wi23rg&utm_medium=api&utm_source=APP-ID-REDACTED&v=2199A65C3E38BBBDD4DFA4F3488C644A2078F93B",
+      "__CLASS__": "Adzuna::API::Response::Job",
+      "salary_max": 69405.23,
+      "location": {
+        "area": ["US", "North Carolina", "Nash County", "Bailey"],
+        "display_name": "Bailey, Nash County",
+        "__CLASS__": "Adzuna::API::Response::Location"
+      },
+      "id": "5819159209",
+      "title": "CDL A Delivery Truck Driver",
+      "created": "2026-07-28T21:52:17Z",
+      "category": {
+        "__CLASS__": "Adzuna::API::Response::Category",
+        "label": "Logistics & Warehouse Jobs",
+        "tag": "logistics-warehouse-jobs"
+      },
+      "contract_time": "full_time",
+      "salary_min": 69405.23,
+      "salary_is_predicted": "1",
+      "latitude": 35.803456
+    },
+    {
+      "salary_max": 61382.87,
+      "redirect_url": "https://www.adzuna.com/land/ad/5819159183?se=IrxYgWaY8RGXlua0wi23rg&utm_medium=api&utm_source=APP-ID-REDACTED&v=B1A1E611EBE51DE8769ADE7F9FEF6CF73FA1454C",
+      "longitude": -77.806211,
+      "__CLASS__": "Adzuna::API::Response::Job",
+      "adref": "eyJhbGciOiJIUzI1NiJ9.eyJzIjoiSXJ4WWdXYVk4UkdYbHVhMHdpMjNyZyIsImkiOiI1ODE5MTU5MTgzIn0.Ms748RrNLTyMN3nuoN2H4gveMBACM51hmc6S2mJq_eg",
+      "company": {
+        "__CLASS__": "Adzuna::API::Response::Company",
+        "display_name": "Mclane Company, Inc."
+      },
+      "description": "Take your CDL-A career further! Our drivers work hard to move, supply, and provide for America's favorite brands. Being reliable and dedicated to safety has defined our success as an industry leader for 130 years. Join McLane and discover the driving difference-we provide you with industry-leading pay, strong and secure client relationships, and get you home safely and more often. That's why our drivers build long-lasting careers with us. ARE YOU APPLYING FOR THE CORRECT LOCATION AND POSITION??…",
+      "salary_min": 61382.87,
+      "category": {
+        "__CLASS__": "Adzuna::API::Response::Category",
+        "label": "Logistics & Warehouse Jobs",
+        "tag": "logistics-warehouse-jobs"
+      },
+      "contract_time": "full_time",
+      "latitude": 35.596539,
+      "salary_is_predicted": "1",
+      "location": {
+        "area": ["US", "North Carolina", "Wilson County", "Stantonsburg"],
+        "display_name": "Stantonsburg, Wilson County",
+        "__CLASS__": "Adzuna::API::Response::Location"
+      },
+      "id": "5819159183",
+      "created": "2026-07-28T21:52:17Z",
+      "title": "CDL A Delivery Truck Driver"
+    }
+  ]
+}

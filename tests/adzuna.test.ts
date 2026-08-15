@@ -11,9 +11,11 @@ import { quotaStatus, quotaWords, recordCalls } from "../src/core/app/quota.ts";
 import { locationFromArea, stateCodeFor } from "../src/core/pipeline/states.ts";
 import {
   buildAdzunaSearchUrl,
+  createAdzunaSource,
   normalizeAdzunaJob,
 } from "../src/core/sources/adzuna.ts";
-import { toPlainMessage } from "../src/core/sources/source.ts";
+import { runSource, toPlainMessage } from "../src/core/sources/source.ts";
+import { fakeClock, fakeHasher, stubHttp } from "./fakes.ts";
 import { rankJobs } from "../src/core/pipeline/rank.ts";
 import { parseProfile } from "../src/core/profile/parse.ts";
 import { readFileSync } from "node:fs";
@@ -24,6 +26,11 @@ import { migrate } from "../src/core/db/migrations.ts";
 import * as repo from "../src/core/db/repo.ts";
 
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
+const NOW_MS = 1_700_000_000_000;
+
+function fixture(relPath: string): string {
+  return readFileSync(join(repoRoot, "fixtures", relPath), "utf8");
+}
 
 const profileOf = () => {
   const parsed = parseProfile(
@@ -430,5 +437,72 @@ describe("stale aggregator listings", () => {
     // 45 days is stale enough to hide, not old enough to delete.
     expect(all).toContain("stale-adzuna");
     db.close();
+  });
+});
+
+// -----------------------------------------------------------------------------
+// The recorded board
+// -----------------------------------------------------------------------------
+
+/**
+ * Adzuna against a real recorded response rather than hand-built objects.
+ *
+ * Recorded 2026-08-15. The app_id is scrubbed from the file because Adzuna puts
+ * it back inside every `redirect_url` as `utm_source` — a response body is not
+ * credential-free just because the credentials went out in the query string.
+ */
+describe("Adzuna over a recorded response", () => {
+  const single = { ...OPTIONS, keywords: ["truck driver"] };
+
+  function fetchCtx(body: Parameters<typeof stubHttp>[0]) {
+    return {
+      http: stubHttp(body),
+      clock: fakeClock(NOW_MS),
+      hasher: fakeHasher,
+      state: null,
+      reporter: () => {},
+      now: NOW_MS,
+    };
+  }
+
+  it("reads a real search page", async () => {
+    const url = buildAdzunaSearchUrl(single, "truck driver", 1);
+    const result = await runSource(
+      createAdzunaSource({ ...single, maxCalls: 1 }),
+      fetchCtx({ [url]: { body: fixture("adzuna/search.json") } }),
+    );
+
+    expect(result.error).toBeNull();
+    expect(result.jobs.length).toBeGreaterThan(0);
+    for (const job of result.jobs) {
+      expect(job.source).toBe("adzuna");
+      expect(job.title.length).toBeGreaterThan(0);
+      // Adzuna predicts salaries and ships no interval; publishing either would
+      // put a number no employer stated on the card.
+      expect(job.salaryMin).toBeNull();
+      expect(job.salaryMax).toBeNull();
+      expect(job.salaryInterval).toBeNull();
+    }
+  });
+
+  /**
+   * A refused key, with Adzuna's real 401 body. The person needs to be told
+   * their numbers were rejected, not shown "AUTH_FAIL".
+   */
+  it("turns a refused key into plain words", async () => {
+    const recorded = JSON.parse(fixture("adzuna/search-401.json")) as {
+      status: number;
+      body: string;
+    };
+    const url = buildAdzunaSearchUrl(single, "truck driver", 1);
+    const result = await runSource(
+      createAdzunaSource({ ...single, maxCalls: 1 }),
+      fetchCtx({ [url]: recorded }),
+    );
+
+    expect(result.jobs).toEqual([]);
+    expect(result.error).toMatch(/would not accept our key/);
+    // And the credentials must not ride along in the message.
+    expect(result.error).not.toContain("the-secret");
   });
 });
