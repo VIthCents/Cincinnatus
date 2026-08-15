@@ -101,9 +101,19 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # Artifacts are unsigned. Signing (Azure Trusted Signing + Apple
-      # notarization) is required before public distribution and lands in
-      # Phase 4 — see docs/SPEC.md section 9.
+      # Artifacts here are deliberately unsigned: signing must never be
+      # required to build, or nobody can contribute without certificates.
+      # Signed release builds live in .github/workflows/release.yml (Azure
+      # Artifact Signing + Apple notarization) — see docs/RELEASING.md.
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # After tauri-action, not before: lib.rs calls tauri::generate_context!,
+      # which needs ../dist to exist at compile time — the bundler's
+      # beforeBuildCommand is what creates it. --release reuses the artifacts
+      # the build just produced instead of compiling the whole tree again.
+      #
+      # keychain_round_trip stays #[ignore]d: it touches real per-user OS
+      # state a runner may not have unlocked. Everything else runs.
+      - run: cargo test --release --manifest-path src-tauri/Cargo.toml

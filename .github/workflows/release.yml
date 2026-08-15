@@ -29,8 +29,30 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Three minutes of Ubuntu before either signing job spends its 90- or
+  # 120-minute budget. Without this a tag could ship a signed, notarised
+  # installer built from a red tree — and a signature is a statement that this
+  # is the software we meant to publish.
+  check:
+    name: Lint, typecheck, test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm format:check
+      - run: pnpm typecheck
+      - run: pnpm test
+
   windows:
     name: Windows — build, sign, verify
+    needs: check
     runs-on: windows-latest
     timeout-minutes: 90
     steps:
@@ -125,6 +147,7 @@ jobs:
 
   macos:
     name: macOS — build, sign, notarize, staple
+    needs: check
     runs-on: macos-15
     timeout-minutes: 120
     env:
