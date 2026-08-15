@@ -85,6 +85,46 @@ async function captureGreenhouse(): Promise<void> {
   });
 }
 
+async function captureLever(): Promise<void> {
+  process.stdout.write("Lever:\n");
+
+  // Lever returns the whole board as a flat array — 6.7 MB for this one — so
+  // the trim is not cosmetic here.
+  const postings = await nodeHttp.get({
+    url: "https://api.lever.co/v0/postings/shieldai?mode=json",
+  });
+  const parsed = JSON.parse(postings.body) as unknown[];
+  save("lever/postings.json", parsed.slice(0, 8));
+
+  // "fetch never throws" has to survive a board that is gone, and that cannot
+  // be tested without a recording of one.
+  const missing = await nodeHttp.get({
+    url: "https://api.lever.co/v0/postings/definitely-not-a-real-board-xyz?mode=json",
+  });
+  save("lever/board-404.json", {
+    status: missing.status,
+    body: missing.body.slice(0, 500),
+  });
+}
+
+async function captureAshby(): Promise<void> {
+  process.stdout.write("Ashby:\n");
+
+  const board = await nodeHttp.get({
+    url: "https://api.ashbyhq.com/posting-api/job-board/saronic?includeCompensation=true",
+  });
+  const parsed = JSON.parse(board.body) as { jobs?: unknown[] };
+  save("ashby/board.json", { ...parsed, jobs: (parsed.jobs ?? []).slice(0, 8) });
+
+  const missing = await nodeHttp.get({
+    url: "https://api.ashbyhq.com/posting-api/job-board/definitely-not-a-real-board-xyz",
+  });
+  save("ashby/board-404.json", {
+    status: missing.status,
+    body: missing.body.slice(0, 500),
+  });
+}
+
 async function captureUsaJobs(): Promise<void> {
   const key = process.env["USAJOBS_API_KEY"];
   const agent = process.env["USAJOBS_USER_AGENT"];
@@ -132,6 +172,8 @@ async function captureUsaJobs(): Promise<void> {
 
 async function main(): Promise<void> {
   await captureGreenhouse();
+  await captureLever();
+  await captureAshby();
   await captureUsaJobs();
   process.stdout.write("\nDone. Read the diff before committing.\n");
 }

@@ -1,4 +1,6 @@
 import { readFileSync, existsSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, it, expect } from "vitest";
 import { rankJobs } from "../src/core/pipeline/rank.ts";
 import { reachAdjustedSimilarity } from "../src/core/pipeline/reach.ts";
@@ -40,6 +42,12 @@ import type { Job, Profile, RankedJob } from "../src/core/types.ts";
  * calibration — and cannot see a change to what gets embedded
  * (`buildProfileText` / `buildJobText`). Those need a live run to evaluate.
  */
+
+// Resolved from this file, not from the working directory. The golden sets
+// load through existsSync, so a wrong CWD would silently produce an empty set
+// and pass every gate rather than failing — the exact shape of quiet failure
+// this file exists to catch.
+const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 
 interface Candidate {
   readonly id: string;
@@ -89,7 +97,7 @@ const SETS = [
 ] as const;
 
 function load(file: string): Candidate[] {
-  const path = `fixtures/rank-eval/${file}.jsonl`;
+  const path = join(repoRoot, "fixtures", "rank-eval", `${file}.jsonl`);
   if (!existsSync(path)) return [];
   return readFileSync(path, "utf8")
     .split("\n")
@@ -99,7 +107,9 @@ function load(file: string): Candidate[] {
 }
 
 function profileOf(name: string): Profile {
-  const parsed = parseProfile(JSON.parse(readFileSync(`fixtures/${name}`, "utf8")));
+  const parsed = parseProfile(
+    JSON.parse(readFileSync(join(repoRoot, "fixtures", name), "utf8")),
+  );
   if (!parsed.ok) throw new Error(parsed.errors.join("; "));
   return parsed.value;
 }

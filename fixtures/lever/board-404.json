@@ -1,0 +1,4 @@
+{
+  "status": 404,
+  "body": "{\"ok\":false,\"error\":\"Document not found\"}"
+}

@@ -1620,3 +1620,31 @@ regenerates and re-charges on every open.
 The Search button stays disabled, saying "Writing your papers", while this runs. The search has
 finished by then but the runner still holds the lock, and a live-looking button that silently does
 nothing for two minutes is worse than an honest one.
+
+---
+
+## 2026-08-14 — Lever and Ashby get recorded fixtures; Adzuna's are still owed
+
+**Context.** CONTRIBUTING requires every source to "ship recorded fixtures, including the error
+responses". Greenhouse and USAJobs did. Lever, Ashby and Adzuna — the three newest, one of which
+shipped three defects within an hour of landing — did not. Their tests built posting objects by
+hand, which can only ever prove the normaliser agrees with whoever wrote the test.
+
+**Decision.** `scripts/capture-fixtures.ts` gains Lever and Ashby, and both are recorded and
+committed: eight postings from shieldai and saronic, trimmed from 6.7 MB and 3.5 MB of live
+response, plus both real 404 bodies. They are recorded through the same script as the others rather
+than through the harness's `--capture`, which writes to the gitignored `fixtures/http/`.
+
+The 404s earn their place: Lever answers `{"ok":false,"error":"Document not found"}` and Ashby
+answers the bare string `Not Found`. A source that tried to parse either as a board would throw, and
+one dead board must never empty somebody's whole list — that contract now has evidence behind it.
+
+**Adzuna remains hand-built, and that is a debt rather than a decision.** Its API needs an app id and
+key, and the capture script gates on them exactly as the USAJobs capture does. Record them the next
+time somebody runs with Adzuna credentials in `.env`.
+
+**Consequence.** Test fixture paths that were resolved from the working directory
+(`tests/rankEval.test.ts`, `tests/adzuna.test.ts`, `tests/feedbackTerms.test.ts`) now resolve from
+the file. That mattered most in rankEval, which loads its golden sets through `existsSync` and
+returns `[]` when they are missing — a wrong CWD would have produced an empty set that passed every
+quality gate instead of failing.

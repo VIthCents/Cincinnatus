@@ -17,13 +17,17 @@ import { toPlainMessage } from "../src/core/sources/source.ts";
 import { rankJobs } from "../src/core/pipeline/rank.ts";
 import { parseProfile } from "../src/core/profile/parse.ts";
 import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { NodeDb } from "../src/node/db.ts";
 import { migrate } from "../src/core/db/migrations.ts";
 import * as repo from "../src/core/db/repo.ts";
 
+const repoRoot = fileURLToPath(new URL("..", import.meta.url));
+
 const profileOf = () => {
   const parsed = parseProfile(
-    JSON.parse(readFileSync("fixtures/profile.sample.json", "utf8")),
+    JSON.parse(readFileSync(join(repoRoot, "fixtures", "profile.sample.json"), "utf8")),
   );
   if (!parsed.ok) throw new Error(parsed.errors.join("; "));
   return parsed.value;

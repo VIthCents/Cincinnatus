@@ -1,8 +1,12 @@
 import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { buildSearchTerms } from "../src/core/pipeline/queries.ts";
 import { parseProfile } from "../src/core/profile/parse.ts";
 import { ADZUNA_MAX_TERMS } from "../src/core/config.ts";
+
+const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 
 /**
  * The thumbs change what gets SEARCHED FOR, not how anything is scored.
@@ -17,7 +21,7 @@ import { ADZUNA_MAX_TERMS } from "../src/core/config.ts";
  */
 const profile = (() => {
   const parsed = parseProfile(
-    JSON.parse(readFileSync("fixtures/profile.sample.json", "utf8")),
+    JSON.parse(readFileSync(join(repoRoot, "fixtures", "profile.sample.json"), "utf8")),
   );
   if (!parsed.ok) throw new Error(parsed.errors.join("; "));
   return parsed.value;

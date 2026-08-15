@@ -1,8 +1,28 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { normalizeUsLocation } from "../src/core/pipeline/states.ts";
-import { normalizeLeverPosting } from "../src/core/sources/lever.ts";
-import { normalizeAshbyPosting } from "../src/core/sources/ashby.ts";
+import {
+  buildLeverUrl,
+  createLeverSource,
+  normalizeLeverPosting,
+} from "../src/core/sources/lever.ts";
+import {
+  buildAshbyUrl,
+  createAshbySource,
+  normalizeAshbyPosting,
+} from "../src/core/sources/ashby.ts";
+import { runSource } from "../src/core/sources/source.ts";
 import { civilianTitlesFor } from "../src/core/profile/crosswalk.ts";
+import { fakeClock, fakeHasher, stubHttp } from "./fakes.ts";
+
+const repoRoot = fileURLToPath(new URL("..", import.meta.url));
+const NOW = 1_700_000_000_000;
+
+function fixture(relPath: string): string {
+  return readFileSync(join(repoRoot, "fixtures", relPath), "utf8");
+}
 
 const ctx = { hasher: { sha256Hex: (s: string) => `h(${s})` }, now: 1_700_000_000_000 };
 
@@ -326,5 +346,97 @@ describe("the military-to-civilian crosswalk", () => {
 
   it("is still empty for a code that does not exist", () => {
     expect(civilianTitlesFor("NOTACODE")).toEqual([]);
+  });
+});
+
+// -----------------------------------------------------------------------------
+// The recorded boards
+// -----------------------------------------------------------------------------
+
+/**
+ * Lever and Ashby against real recorded responses, not hand-built shapes.
+ *
+ * CONTRIBUTING asks every source to "ship recorded fixtures, including the
+ * error responses". These two shipped without any: their tests built posting
+ * objects by hand, which can only ever prove the normaliser agrees with
+ * whoever wrote the test. Recorded 2026-08-14 from shieldai (Lever) and
+ * saronic (Ashby), trimmed to eight postings each.
+ */
+describe("Lever and Ashby over recorded responses", () => {
+  const fetchCtx = {
+    http: stubHttp({
+      [buildLeverUrl("shieldai")]: { body: fixture("lever/postings.json") },
+      [buildAshbyUrl("saronic")]: { body: fixture("ashby/board.json") },
+    }),
+    clock: fakeClock(NOW),
+    hasher: fakeHasher,
+    state: null,
+    reporter: () => {},
+    now: NOW,
+  };
+
+  it("reads a real Lever board", async () => {
+    const result = await runSource(
+      createLeverSource("shieldai", "Shield AI"),
+      fetchCtx,
+    );
+
+    expect(result.error).toBeNull();
+    expect(result.jobs.length).toBeGreaterThan(0);
+    for (const job of result.jobs) {
+      expect(job.source).toBe("lever");
+      expect(job.title.length).toBeGreaterThan(0);
+      expect(job.url).toMatch(/^https:\/\//);
+      // Lever gives HTML; what reaches the embedder must not.
+      expect(job.descriptionText).not.toMatch(/<\/?[a-z]/i);
+    }
+  });
+
+  it("reads a real Ashby board", async () => {
+    const result = await runSource(createAshbySource("saronic", "Saronic"), fetchCtx);
+
+    expect(result.error).toBeNull();
+    expect(result.jobs.length).toBeGreaterThan(0);
+    for (const job of result.jobs) {
+      expect(job.source).toBe("ashby");
+      expect(job.title.length).toBeGreaterThan(0);
+      expect(job.url).toMatch(/^https:\/\//);
+    }
+  });
+
+  /**
+   * The "fetch never throws" contract, against the real 404 bodies. Lever
+   * answers with JSON ({"ok":false,...}); Ashby answers with the bare string
+   * "Not Found". A source that tried to parse either as a board would throw,
+   * and one dead board must never empty somebody's whole list.
+   */
+  it("turns a board that is gone into plain words, not an exception", async () => {
+    const lever404 = JSON.parse(fixture("lever/board-404.json")) as {
+      status: number;
+      body: string;
+    };
+    const ashby404 = JSON.parse(fixture("ashby/board-404.json")) as {
+      status: number;
+      body: string;
+    };
+
+    const gone = {
+      ...fetchCtx,
+      http: stubHttp({
+        [buildLeverUrl("closed-board")]: lever404,
+        [buildAshbyUrl("closed-board")]: ashby404,
+      }),
+    };
+
+    for (const source of [
+      createLeverSource("closed-board", "Closed"),
+      createAshbySource("closed-board", "Closed"),
+    ]) {
+      const result = await runSource(source, gone);
+      expect(result.jobs).toEqual([]);
+      expect(result.error).not.toBeNull();
+      // A sentence, not a status line.
+      expect(result.error).toMatch(/does not exist any more/);
+    }
   });
 });
