@@ -25,6 +25,21 @@ import { SCORE_PROMPT_VERSION, SCORE_SYSTEM } from "./prompts/score.v1.ts";
  * than by remembering.
  */
 
+/**
+ * No `minimum`/`maximum` on `fit`, verified against the live API on 2026-08-15:
+ * structured outputs reject them outright —
+ *
+ *   400 output_config.format.schema: For 'number' type, properties maximum,
+ *   minimum are not supported
+ *
+ * — and a rejected schema fails the whole call, so this is not a silently
+ * ignored keyword but a scoring stage that never runs. `maxLength` on a string
+ * IS accepted and stays.
+ *
+ * Nothing is lost by their absence: the range is clamped in code below, which
+ * is where it belonged anyway. A prompt is a request; the clamp is the
+ * guarantee.
+ */
 export const SCORE_BATCH_SCHEMA = {
   type: "object",
   additionalProperties: false,
@@ -38,7 +53,7 @@ export const SCORE_BATCH_SCHEMA = {
         required: ["id", "fit", "why"],
         properties: {
           id: { type: "string" },
-          fit: { type: "number", minimum: 0, maximum: 100 },
+          fit: { type: "number" },
           why: { type: "string", maxLength: LLM_RATIONALE_MAX_CHARS },
         },
       },

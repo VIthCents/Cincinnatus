@@ -506,6 +506,18 @@ async function commandSearch(values: SearchFlags): Promise<number> {
     for (const source of failed) out(`  - ${source.error}`);
   }
 
+  for (const note of report.notes) out(note);
+
+  // AI scoring is deliberately quiet in the app — the list is complete either
+  // way. It must not be quiet here: a scoring stage that announced itself and
+  // then silently stored nothing is exactly the failure this line exists to
+  // make visible, and it is how a rejected schema went unnoticed once already.
+  if (report.llmScored > 0) {
+    out(`The AI judged ${report.llmScored} job(s) for how well they fit you.`);
+  } else if (report.llmScoreNote !== null) {
+    out(`AI scoring did not run: ${report.llmScoreNote}`);
+  }
+
   if (report.fit !== null) {
     out(
       `Match scores ranged ${report.fit.min.toFixed(1)} to ${report.fit.max.toFixed(1)} (middle ${report.fit.median.toFixed(1)}).`,
