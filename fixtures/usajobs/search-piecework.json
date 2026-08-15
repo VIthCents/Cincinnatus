@@ -6,7 +6,7 @@
       {
         "MatchedObjectId": "875949500",
         "MatchedObjectDescriptor": {
-          "PositionID": "PB-RATE-SAMPLE",
+          "PositionID": "PW-RATE-SAMPLE",
           "PositionTitle": "Motor Vehicle Operator",
           "PositionURI": "https://www.usajobs.gov:443/job/875949500",
           "ApplyURI": ["https://www.usajobs.gov:443/job/875949500"],
@@ -49,10 +49,10 @@
           "QualificationSummary": "GS-09: Your resume must demonstrate at least one year of specialized experience at or equivalent to the GS-08 grade level or pay band in the Federal service or equivalent experience in the private or public sector. Specialized experience must demonstrate the following: Providing advanced life support (ALS) emergency medical care as the lead paramedic during emergency incidents; performing fire suppression and prevention activities; providing ambulance transport services; conducting technical rescue and hazardous materials response; participating in emergency communications; and delivering public education, training, and community risk reduction services while exercising independent judgment in patient care and emergency operations. GS-08: Your resume must demonstrate at least one year of specialized experience at or equivalent to the GS-07 grade level or pay band in the Federal service or equivalent experience in the private or public sector. Specialized experience must demonstrate the following: Providing advanced life support (ALS) emergency medical care as part of a firefighting team; supporting fire suppression, ventilation, search and rescue, hazardous materials, and emergency response operations; operating firefighting, rescue, and EMS equipment; and assisting with patient assessment, treatment, stabilization, and transport in accordance with established protocols. Additional qualification information can be found from the following Office of Personnel Management website: https://www.opm.gov/policy-data-oversight/classification-qualifications/general-schedule-qualification-standards/0000/fire-protection-and-prevention-series-0081/ You will receive credit for all qualifying experience, including volunteer and part time experience. You must clearly identify the duties and responsibilities in each position held and the total number of hours per week. Experience refers to paid and unpaid experience, including volunteer work done through National Service programs (e.g., professional, philanthropic, religious, spiritual, community, student, social). Volunteer work helps build critical competencies, knowledge, and skills and can provide valuable training and experience that translates directly to paid employment. All qualifications requirements must be met by the closing date of this announcement and clearly documented in your resume. Additional Conditions of Employment: CERTIFICATIONS REQUIRED: GS-09: At the time of appointment, the incumbent must possess a valid State Driver's License, National Registry or California State Emergency Medical Technician - Paramedic (EMT-P) license, current American Heart Association or equivalent certificate in Cardiovascular Resuscitation (CPR), Firefighter I and Firefighter II, HAZMAT Awareness and HAZMAT Operations IAW DODI 1400.25 Vol 336. GS-08: At the time of appointment, the incumbent must possess a valid State Driver's License, National Registry or California State Emergency Medical Technician - Paramedic (EMT-P) license, current American Heart Association or equivalent certificate in Cardiovascular Resuscitation (CPR), the incumbent must obtain within the first year, Firefighter I and Firefighter II, HAZMAT Awareness and HAZMAT Operations and maintain the above qualifications IAW DODI 1400.25 Vol 336. Must possess or be able to obtain a valid State of California or equivalent driver's license with a Firefighter Endorsement within (180) days of appointment. Incumbent must obtain their EMT-P Accreditation through the Inland County Emergency Medical Agency (ICEMA) within 60 days of employment, maintain certification, and adhere to basic scope of practice standards as defined in Title 22 of the California Code of Regulations, throughout his/her career.",
           "PositionRemuneration": [
             {
-              "MinimumRange": "2037.20",
-              "MaximumRange": "2650.40",
-              "RateIntervalCode": "PB",
-              "Description": "Per Biweekly"
+              "MinimumRange": "12.50",
+              "MaximumRange": "18.00",
+              "RateIntervalCode": "PW",
+              "Description": "Piece Work"
             }
           ],
           "PositionStartDate": "2026-07-10T00:00:00.0000",

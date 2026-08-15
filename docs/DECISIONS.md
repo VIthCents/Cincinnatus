@@ -1648,3 +1648,43 @@ time somebody runs with Adzuna credentials in `.env`.
 the file. That mattered most in rankEval, which loads its golden sets through `existsSync` and
 returns `[]` when they are missing — a wrong CWD would have produced an empty set that passed every
 quality gate instead of failing.
+
+---
+
+## 2026-08-15 — The USAJobs rate codes, read from the codelist at last
+
+**Context.** On 2026-08-14 the rate-interval mapping was left deliberately incomplete: the
+authoritative codelist could not be reached (connection reset, twice), so `PB`, `PW` and `BW` were
+all left out and any code outside PA/PH/PD/PM showed no pay. The endpoint answered today.
+
+**Decision.** All ten codes are now known, and two of the original three assumptions were wrong:
+
+| Code | Value | What the app does |
+| ---- | ----- | ----------------- |
+| PA | Per Year | year |
+| PH | Per Hour | hour |
+| PD | Per Day | day |
+| PM | Per Month | month |
+| BW | Bi-weekly | annualised, x26 |
+| PW | Piece Work | no pay shown |
+| FB | Fee Basis | no pay shown |
+| SY | School Year | no pay shown |
+| ST | Student Stipend Paid | no pay shown |
+| WC | Without Compensation | no pay shown |
+
+`PW` means **piece work**, not "per week" as the original table had it. A piece rate has no time
+interval at all, so rendering it as a weekly wage was inventing a fact.
+
+**`PB` does not exist.** The original code mapped a code the API never issues. The real biweekly
+code is `BW`, which nothing handled — so genuinely biweekly federal postings were showing no pay.
+
+`BW` is annualised rather than displayed as-is, because a bare "$2,037" reads as a salary and a
+biweekly figure is off by 26x. Federal pay periods are 26 per leave year by statute, so this is
+arithmetic on a published number rather than a guess about one.
+
+The five that show nothing show nothing deliberately. Fee basis, piece work and a school year are
+not intervals this app can convert without inventing a denominator, and "Without Compensation" is a
+real category of federal posting — printing "$0 a year" against one would be its own small lie.
+
+**Consequence.** Federal salaries are now shown for more postings than before this pair of changes,
+not fewer, and every one of them is shown in a unit the API actually defines.

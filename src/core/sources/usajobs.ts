@@ -93,25 +93,44 @@ interface SearchResponse {
 }
 
 /**
- * USAJobs rate-interval codes we are willing to put a unit on.
+ * USAJobs rate-interval codes, verified 2026-08-15 against the authoritative
+ * list at data.usajobs.gov/api/codelist/remunerationrateintervalcodes.
  *
- * Only codes whose meaning is unambiguous. Anything else — including a code
- * that arrives here tomorrow — produces no salary at all rather than a number
- * with a guessed unit, because "Pay not listed" is true and "$2,037 a year"
- * might not be. See payFields below.
+ * All ten codes, and what this app does with each:
  *
- * PB used to map to "year" with a comment admitting it meant "per biweekly
- * period" and that normalising was "not worth the guess". That is a wrong
- * number in a veteran's face: a $2,037 biweekly salary rendered as $2,037 a
- * year, for federal work paying about $53,000.
+ *   PA  Per Year               -> year
+ *   PH  Per Hour               -> hour
+ *   PD  Per Day                -> day
+ *   PM  Per Month              -> month
+ *   BW  Bi-weekly              -> annualised, x26 (see below)
+ *   PW  Piece Work             -> no pay shown
+ *   FB  Fee Basis              -> no pay shown
+ *   SY  School Year            -> no pay shown
+ *   ST  Student Stipend Paid   -> no pay shown
+ *   WC  Without Compensation   -> no pay shown
  *
- * PW used to map to "week". Federal payroll code lists give PW as *piece work*
- * and use BY for biweekly, which would make both of the old entries wrong.
- * Attempted to verify against the authoritative list at
- * data.usajobs.gov/api/codelist/remunerationrateintervalcodes on 2026-08-14 and
- * could not reach it from this environment — so both are left out. If somebody
- * can reach that endpoint, confirm PB, PW and BY and add them back with the
- * date in this comment.
+ * Two of these were wrong before the list was read, and both were the kind of
+ * wrong that puts a false number in front of somebody deciding whether to
+ * apply.
+ *
+ * `PW` was mapped to "week". It means **piece work** — pay per unit produced,
+ * which has no time interval at all. A piece rate rendered as a weekly wage is
+ * a fabricated fact.
+ *
+ * `PB` was mapped to "year" under a comment admitting it meant "per biweekly
+ * period". There is no `PB` in the codelist: it does not exist. The real
+ * biweekly code is `BW`, which was never handled, so genuinely biweekly federal
+ * postings showed no pay at all.
+ *
+ * `BW` is annualised rather than shown as-is, because "$2,037" with no unit
+ * reads as a salary and a biweekly figure is off by 26x. The multiplier is not
+ * an estimate: federal pay periods are 26 per leave year by statute, so this is
+ * arithmetic on a number the employer published, not a guess about it.
+ *
+ * The five that show nothing show nothing on purpose. Fee basis, piece work and
+ * a school year are not time intervals this app can convert without inventing a
+ * denominator, and "Without Compensation" is a real category of federal posting
+ * — printing "$0 a year" against one would be its own small lie.
  */
 const INTERVALS: Readonly<Record<string, SalaryInterval>> = {
   PA: "year",
@@ -119,6 +138,9 @@ const INTERVALS: Readonly<Record<string, SalaryInterval>> = {
   PD: "day",
   PM: "month",
 };
+
+/** Federal pay periods per leave year. Statutory, not an estimate. */
+const PAY_PERIODS_PER_YEAR = 26;
 
 function parseMoney(value: string | undefined): number | null {
   if (value === undefined || value === "") return null;
@@ -148,7 +170,24 @@ function payFields(
   if (pay === undefined) return none;
 
   const code = pay.RateIntervalCode;
-  const interval = code === undefined ? null : (INTERVALS[code] ?? null);
+  if (code === undefined) return none;
+
+  // Biweekly is converted rather than shown, because a bare "$2,037" reads as
+  // a salary and is off by 26x. Multiplying a published figure by a statutory
+  // constant is arithmetic; leaving the unit off would be the guess.
+  if (code === "BW") {
+    const min = parseMoney(pay.MinimumRange);
+    const max = parseMoney(pay.MaximumRange);
+    if (min === null && max === null) return none;
+    return {
+      salaryMin: min === null ? null : min * PAY_PERIODS_PER_YEAR,
+      salaryMax: max === null ? null : max * PAY_PERIODS_PER_YEAR,
+      salaryCurrency: "USD",
+      salaryInterval: "year",
+    };
+  }
+
+  const interval = INTERVALS[code] ?? null;
   if (interval === null) return none;
 
   return {

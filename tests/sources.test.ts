@@ -318,25 +318,39 @@ describe("USAJobs source", () => {
   });
 
   /**
-   * A rate interval we cannot vouch for drops the amounts too. Keeping them and
-   * nulling only the unit prints a bare "$2,037 to $2,650", which reads as an
-   * annual salary — and for a biweekly federal rate that is off by 26x.
+   * Rate intervals, verified 2026-08-15 against USAJobs' own codelist. Two
+   * mappings were wrong before that list was read: PW was called "week" when
+   * it means piece work, and PB — which does not exist in the codelist at all
+   * — was called "year" while meaning a biweekly period.
    */
-  it("shows no pay at all rather than a number with a guessed unit", async () => {
+  async function payFor(fixtureName: string) {
     const single = { ...options, keywords: ["truck driver"] };
     const url = buildSearchUrl(single, "truck driver", 1);
-    const http = stubHttp({
-      [url]: { body: fixture("usajobs/search-unverified-rate.json") },
-    });
-
+    const http = stubHttp({ [url]: { body: fixture(fixtureName) } });
     const result = await runSource(createUsaJobsSource(single), ctx(http));
-
     expect(result.error).toBeNull();
     const job = result.jobs[0];
     expect(job).toBeDefined();
-    expect(job?.salaryInterval).toBeNull();
-    expect(job?.salaryMin).toBeNull();
-    expect(job?.salaryMax).toBeNull();
-    expect(job?.salaryCurrency).toBeNull();
+    return job!;
+  }
+
+  it("annualises a biweekly rate rather than printing it bare", async () => {
+    const job = await payFor("usajobs/search-biweekly.json");
+    // 26 pay periods per leave year, by statute. $2,037.20 biweekly is about
+    // $52,967 a year — not "$2,037", which is what a bare figure would imply.
+    expect(job.salaryInterval).toBe("year");
+    expect(job.salaryMin).toBe(2037 * 26);
+    expect(job.salaryMax).toBe(2650 * 26);
+    expect(job.salaryCurrency).toBe("USD");
+  });
+
+  it("shows no pay for piece work, which has no time interval at all", async () => {
+    const job = await payFor("usajobs/search-piecework.json");
+    // A piece rate rendered as a wage would be a fabricated fact. This code
+    // used to be mapped to "week".
+    expect(job.salaryInterval).toBeNull();
+    expect(job.salaryMin).toBeNull();
+    expect(job.salaryMax).toBeNull();
+    expect(job.salaryCurrency).toBeNull();
   });
 });
