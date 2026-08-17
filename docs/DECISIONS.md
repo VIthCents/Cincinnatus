@@ -1688,3 +1688,125 @@ real category of federal posting — printing "$0 a year" against one would be i
 
 **Consequence.** Federal salaries are now shown for more postings than before this pair of changes,
 not fewer, and every one of them is shown in a unit the API actually defines.
+
+---
+
+## 2026-08-17 — The README told veterans the app was free and needed no setup. Both were false.
+
+**Context.** The front page opened with "no account, no sign-up, nothing to pay for" and then, sixty
+lines later, "You pay Anthropic for what you use — usually a few cents per document." The heading
+above the extras said "Two things you can turn on later, both free" — there are three, and the first
+one under that heading is the paid one. "You do not need to set anything up… It finds jobs on
+USAJobs" was wrong twice over: USAJobs needs a free key, and with no key the app never contacts them
+at all. The wizard shipped the same claim on its very first screen ("All of it free"), and PRIVACY.md
+opened with "You never sign up" fifty lines above the paragraph explaining the USAJobs signup email.
+
+None of this was malicious drift. Each sentence was true of the thing it was written next to, and
+false as a summary of the whole. The audience is the one that can least afford to find out about a
+credit card at step six.
+
+**Decision.** Say what costs money, on the front page, above the fold: the app is free, job search is
+free and keyless, USAJobs and Adzuna are free sign-ups, and the AI helper costs money that goes to
+Anthropic and never to us. The cost is now stated with real numbers taken from this log — about 2
+cents to score 30 jobs, 10 to 15 cents per set of documents — because "a few cents" is the kind of
+phrase that reads as "free" to someone deciding whether they can afford it.
+
+The egress list was the other lie of omission. README claimed "two things go out, and nothing else"
+and Settings said the same; PRIVACY.md correctly listed four. The USAJobs signup email was the one
+being dropped, which is exactly the item a veteran would most want counted. All three now list four.
+
+**Setup instructions are written for someone who has never made a developer account.** One action per
+numbered step, every button named as it appears, the scary screens described before they appear
+(SmartScreen's blue box, the key that shows only once). The guides moved into
+`src/ui/components/KeyGuides.tsx` and are rendered by both the wizard and Settings, because the
+previous arrangement — steps in the wizard, one sentence in Settings — meant anyone who skipped the
+step on first run could never find the instructions again, and the two copies were free to disagree.
+
+Adzuna's guide said "fill in your name and email"; the form actually asks for a user name, a
+password and an email. Corrected against the live page, along with the Copy button for the website
+address the form demands, which was previously bold text nobody could copy.
+
+**Verification.** Reading level measured, per this log's habit: README **4.38**, PRIVACY **4.86**, the
+new key guides **4.93** (Flesch-Kincaid, throwaway scorer, prose only). The bar is 6. The download
+link, its SHA256 and its size were checked against the live release asset rather than trusted:
+hash matches, 12.9 MB.
+
+**What could not be machine-verified.** `console.anthropic.com` is behind a login, so its button
+names come from Anthropic's documented flow rather than a fetch of the page. Adzuna's signup form and
+the release asset were both read directly. USAJobs refused our requests (`ECONNRESET`) — its steps
+are therefore written to be robust to form changes ("fill in every box") rather than naming fields
+that may not exist. If someone later confirms that page, tighten the wording.
+
+**Consequence.** `docs/RELEASING.md` said "Hawkseye Inc" in the two places describing what the
+SmartScreen dialog shows, in the same file that declares the name is "Hawkseye Corp." — a reader
+cross-checking the publisher against our own docs would have found two different companies, which is
+the exact failure signing exists to prevent. Fixed. The historical mention in this log is left alone;
+this file records what was true when it was written.
+
+---
+
+## 2026-08-17 — Three rendering bugs, all of them CSS, all of them shipped in v0.1.0
+
+**Context.** Writing the step-by-step key guides put far more inline markup inside them than
+before — links, bold button names, an address in `<code>` — and that exposed a layout bug that had
+been in the wizard since the guides were written. Looking for others found two more. All three were
+in vendored design-system CSS, and all three had the same shape: markup that only works if the
+element has a `display` it was never given.
+
+**`.cn-guide li` was a two-column grid.** The number went in column one, the words in column two —
+which works exactly as long as a step contains nothing but text. Every element inside a step becomes
+a grid item of its own, so a step containing a link produced three items, not two: the link was
+auto-placed into the next free cell, which is the 40px number column on the following row, and it
+drew straight through the words beside it. The wizard already shipped this on its Anthropic step. It
+is now a block with the number absolutely positioned beside it, so a step can hold any inline markup
+at all — which it must, because these steps name buttons and paste addresses constantly.
+
+**The progress bar never filled.** `.cn-progress__track` and `.cn-progress__fill` are `<span>`s and
+were never given a `display`, so both stayed inline — and `height`, `width` and `transform` do
+nothing to a non-replaced inline box. The track collapsed to its own border and the fill had no
+geometry at all. A first search 70% of the way through 7,084 jobs drew an empty bar, on the one
+screen whose entire job is convincing somebody that a twenty-minute wait is progressing rather than
+hung. The same defect silently disabled the indeterminate animation, which slides the fill with a
+transform, so the two states failed in the same place for the same reason. Both are `display: block`
+now, and `.cn-progress__fill` starts at `width: 0` rather than relying on the inline style always
+being present. Note the wizard's own step bar is fine: `.cn-steps__track` is a flex container, so its
+segments were block-level all along — which is why this was easy to miss.
+
+**Body copy had no list style.** The reset strips markers and indent from every `ul`, and the design
+system only restores them inside printed documents (`.paper`, `.doc__body`). A list in the interface
+itself would have run together as unmarked lines, so the four-egress list added to Settings needed
+`.prose-list` before it could be a list at all.
+
+**Verified by rendering, not by reading.** The fixes were checked against the real compiled
+stylesheet in a headless browser rather than reasoned about — the grid bug in particular looks
+perfectly correct in the source. No new dependency: the browser is the one already on the machine,
+and the harness lives in a scratch directory, not the repo.
+
+## 2026-08-17 — One logo, and it is the wreath
+
+**Context.** The app drew two different marks. The window header and the wizard used a rank chevron
+over a rule, ported from the design system as `assets/mark.svg`; the taskbar, Start menu and
+installer used a laurel wreath around an arrow. Nothing in this log ever recorded the wreath, and
+nothing in the design system mentions it — the icon files were all generated in a single batch and
+had simply never been reconciled with the header.
+
+**Decision.** The wreath wins, by the owner's call. It is the identity already installed on the
+machines of everyone who has v0.1.0, it survives being shrunk to a taskbar better than a chevron
+does, and the laurel is the more apt image for a man who went back to his farm. `Mark.tsx` now draws
+it: leaves placed around an arc, and an arrow through the opening.
+
+**The leaves are generated, not hand-listed.** Fourteen hand-written ellipses would be unreadable and
+unmaintainable; a loop over an arc is neither, and it also made the fit easy to correct — the first
+attempt used a wreath wider than the icon's, which shrank the arrow, and the second was tight enough
+that the leaves merged into one smooth band. The geometry is now fitted to the icon's own arc, and
+each leaf is turned off the tangent so its tip clears its neighbour, which is what makes it read as
+leaves rather than a ring.
+
+**The arrow keeps `currentColor`; the laurel does not.** The arrow has to work on the wizard's dark
+header and on a light background, so it takes the surrounding text colour. The green is fixed,
+because that colour is most of what makes the icon recognisable at 16px, and a monochrome wreath
+would be a different mark again.
+
+**Consequence.** The two are compared side by side at 128px, 26px and 16px, in both themes. The PNG
+and ICO files are untouched — this change makes the app agree with the icon that already shipped,
+so the signed installer's identity is unchanged.
