@@ -41,12 +41,12 @@ Set these as **Secrets**:
 Set these as **Variables** — they are not secret, and keeping them out of the
 secret store means they show up in logs where they are useful for debugging:
 
-| Name                     | What it is                                                                                                |
-| ------------------------ | --------------------------------------------------------------------------------------------------------- |
-| `AZURE_SIGNING_ENDPOINT` | Region endpoint, e.g. `https://eus.codesigning.azure.net`                                                 |
-| `AZURE_SIGNING_ACCOUNT`  | Artifact Signing account name                                                                             |
-| `AZURE_SIGNING_PROFILE`  | Certificate profile name                                                                                  |
-| `APPLE_SIGNING_IDENTITY` | e.g. `Developer ID Application: Hawkseye Inc (TEAMID)` — must match the certificate's common name exactly |
+| Name                     | What it is                                                                                                                                  |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AZURE_SIGNING_ENDPOINT` | Region endpoint, e.g. `https://eus.codesigning.azure.net`                                                                                   |
+| `AZURE_SIGNING_ACCOUNT`  | Artifact Signing account name                                                                                                               |
+| `AZURE_SIGNING_PROFILE`  | Certificate profile name                                                                                                                    |
+| `APPLE_SIGNING_IDENTITY` | `Developer ID Application: Daniel Kelley (ZF45F5247J)` — read from the issued certificate on 2026-08-16; must match its common name exactly |
 
 ## Azure: the names all changed
 
@@ -142,9 +142,43 @@ Anthropic calls when the user has supplied a key. That promise has to be amended
 in plain words, and the check should probably be opt-in, before any code is
 written. See `docs/DECISIONS.md`.
 
-## Azure one-time setup, before the first release
+## Azure: done, and the values it issued
 
-Do this early — one step has a lead time measured in weeks.
+Completed 2026-08-16. Organization identity validation passed and the account is
+issuing certificates, so the multi-week step below is **history, not a to-do** —
+it is kept because it has to be repeated if the account is ever rebuilt.
+
+| Variable                 | Value                                  |
+| ------------------------ | -------------------------------------- |
+| `AZURE_SIGNING_ENDPOINT` | `https://eus.codesigning.azure.net/`   |
+| `AZURE_SIGNING_ACCOUNT`  | `Euterpe`                              |
+| `AZURE_SIGNING_PROFILE`  | `Euterpe`                              |
+| `AZURE_SUBSCRIPTION_ID`  | `6bff6c6f-7536-43f7-9cd0-0451c70f7088` |
+
+Certificate subject, which is the authority for `bundle.publisher` in
+`tauri.conf.json`:
+
+```
+CN=Hawkseye Corp., O=Hawkseye Corp., L=Poughkeepsie, S=New York, C=US
+```
+
+**It is "Hawkseye Corp.", not "Hawkseye Inc".** The trailing period is part of
+the name. `publisher` was set to the wrong one from an early draft of this file
+and is now corrected; if these two ever disagree, the installer shows one name
+and the signature shows another, which is the exact thing signing is meant to
+stop.
+
+Identity validation id `b93ec44b-7e83-4cba-98aa-7cf7d71af150`.
+
+**The certificates are deliberately short-lived** — roughly three days, rotating
+daily. That is how Artifact Signing works and it is not a problem to fix: the
+signature stays valid after the certificate expires _because it is
+timestamped_. `release.yml` already passes `/tr`, and it must keep doing so —
+without a timestamp every installer would stop validating within days.
+
+## Azure one-time setup, for rebuilding the account from scratch
+
+Already done for the current account. One step has a lead time measured in weeks.
 
 1. Register the `Microsoft.CodeSigning` resource provider on a **pay-as-you-go
    or Enterprise Agreement** subscription. Free, trial and sponsored

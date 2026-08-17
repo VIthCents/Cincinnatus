@@ -10,10 +10,45 @@ you did not ask it to go.
   resume and cover letter for that job. **You** click Apply. The app never
   applies for anything on your behalf.
 
-> **Status: not released yet.** It works — the job search, the documents and the
-> app itself are all built and tested — but there is no installer to download
-> yet. If you are comfortable with a terminal you can build it yourself
-> (see below). Otherwise, watch this repo.
+---
+
+## Download it
+
+**[⬇ Download Cincinnatus for Windows](https://github.com/VIthCents/Cincinnatus/releases/latest/download/Cincinnatus_0.1.0_x64-setup.exe)** — 13 MB
+
+Open the file you downloaded and follow the prompts. It installs for you only,
+so it never asks for an administrator password.
+
+Windows may still show a blue "Windows protected your PC" box the first few
+days. Click **More info**, and check that it says **Hawkseye Corp.** — that is
+us. Then click **Run anyway**. That box appears because the app is new, not
+because anything is wrong with it, and it stops appearing as more people
+install it.
+
+**Mac is not ready yet.** The Mac version needs a separate signature from Apple
+that is not finished. If you install an unsigned Mac app, macOS blocks it in a
+way that is genuinely hard to undo, so we would rather wait than hand you that.
+
+<details>
+<summary>Checking the download yourself (optional)</summary>
+
+The installer is signed by **Hawkseye Corp.** Right-click it → Properties →
+Digital Signatures to see for yourself.
+
+To check nothing changed on the way to you, open PowerShell in your Downloads
+folder and run:
+
+```powershell
+Get-FileHash .\Cincinnatus_0.1.0_x64-setup.exe -Algorithm SHA256
+```
+
+It should print:
+
+```
+39A9DBE897BE883216A463FB01DC9EF7ED9AD018C8550B7683B25627D688BC03
+```
+
+</details>
 
 ---
 

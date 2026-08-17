@@ -53,3 +53,9 @@ coverage/
 # fixtures/greenhouse and fixtures/usajobs instead.
 fixtures/http/
 
+
+# Local Windows signing scaffolding. The dlib is a 14 MB NuGet download and the
+# metadata/config name one machine's paths — CI writes its own (release.yml).
+tools/
+signing-metadata.json
+tauri.localsign.conf.json

@@ -27,7 +27,7 @@
   "bundle": {
     "active": true,
     "targets": ["nsis", "app", "dmg"],
-    "publisher": "Hawkseye Inc",
+    "publisher": "Hawkseye Corp.",
     "homepage": "https://github.com/VIthCents/Cincinnatus",
     "copyright": "Copyright (c) 2026 Cincinnatus contributors. MIT license.",
     "category": "Business",

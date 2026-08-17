@@ -1659,18 +1659,18 @@ all left out and any code outside PA/PH/PD/PM showed no pay. The endpoint answer
 
 **Decision.** All ten codes are now known, and two of the original three assumptions were wrong:
 
-| Code | Value | What the app does |
-| ---- | ----- | ----------------- |
-| PA | Per Year | year |
-| PH | Per Hour | hour |
-| PD | Per Day | day |
-| PM | Per Month | month |
-| BW | Bi-weekly | annualised, x26 |
-| PW | Piece Work | no pay shown |
-| FB | Fee Basis | no pay shown |
-| SY | School Year | no pay shown |
-| ST | Student Stipend Paid | no pay shown |
-| WC | Without Compensation | no pay shown |
+| Code | Value                | What the app does |
+| ---- | -------------------- | ----------------- |
+| PA   | Per Year             | year              |
+| PH   | Per Hour             | hour              |
+| PD   | Per Day              | day               |
+| PM   | Per Month            | month             |
+| BW   | Bi-weekly            | annualised, x26   |
+| PW   | Piece Work           | no pay shown      |
+| FB   | Fee Basis            | no pay shown      |
+| SY   | School Year          | no pay shown      |
+| ST   | Student Stipend Paid | no pay shown      |
+| WC   | Without Compensation | no pay shown      |
 
 `PW` means **piece work**, not "per week" as the original table had it. A piece rate has no time
 interval at all, so rendering it as a weekly wage was inventing a fact.
