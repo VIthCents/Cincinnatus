@@ -37,6 +37,7 @@ import {
  */
 
 const FILTERS = [
+  { id: "nearby", label: "Near me only" },
   { id: "remote", label: "Work-from-home only" },
   { id: "federal", label: "Federal jobs only" },
   { id: "strongish", label: "Hide fair matches" },
@@ -44,15 +45,18 @@ const FILTERS = [
 
 type FilterId = (typeof FILTERS)[number]["id"];
 
+const NO_FILTERS: Record<FilterId, boolean> = {
+  nearby: false,
+  remote: false,
+  federal: false,
+  strongish: false,
+};
+
 export function OpportunitiesTab() {
   const state = useAppState();
   const dispatch = useAppDispatch();
 
-  const [on, setOn] = useState<Record<FilterId, boolean>>({
-    remote: false,
-    federal: false,
-    strongish: false,
-  });
+  const [on, setOn] = useState<Record<FilterId, boolean>>(NO_FILTERS);
   const [preparing, setPreparing] = useState<RankedJob | null>(null);
   const [showingPapers, setShowingPapers] = useState<Job | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -82,6 +86,9 @@ export function OpportunitiesTab() {
     if (state.ranked === null) return [];
     return state.ranked.filter((r) => {
       if (state.hidden.has(r.job.id)) return false;
+      // Reuses the reach test the ranking and the "Outside your area" label
+      // already share, rather than asking the question a third way.
+      if (on.nearby && !r.withinReach) return false;
       if (on.remote && r.job.remote !== true) return false;
       if (on.federal && r.job.source !== "usajobs") return false;
       if (on.strongish && matchLevel(r.fitScore) === "fair") return false;
@@ -89,7 +96,13 @@ export function OpportunitiesTab() {
     });
   }, [state.ranked, state.hidden, on]);
 
-  const anyFilterOn = on.remote || on.federal || on.strongish;
+  const anyFilterOn = on.nearby || on.remote || on.federal || on.strongish;
+
+  // "Near me only" is offered only when the app knows where "me" is. Without a
+  // location every job counts as reachable, so the button would be a control
+  // that visibly does nothing — the worst thing to hand this audience.
+  const knowsLocation = state.profile?.location != null;
+  const offered = FILTERS.filter((f) => f.id !== "nearby" || knowsLocation);
   const widened = state.lastReport?.widenedBeyondRadius === true;
 
   return (
@@ -209,7 +222,7 @@ export function OpportunitiesTab() {
       {state.ranked !== null && (
         <>
           <div className="cn-filters" role="group" aria-label="Narrow the list">
-            {FILTERS.map((f) => (
+            {offered.map((f) => (
               <button
                 key={f.id}
                 type="button"
@@ -254,11 +267,7 @@ export function OpportunitiesTab() {
           title={anyFilterOn ? "Nothing matches those filters." : "Nothing here yet."}
           actions={
             anyFilterOn ? (
-              <QuietButton
-                onClick={() =>
-                  setOn({ remote: false, federal: false, strongish: false })
-                }
-              >
+              <QuietButton onClick={() => setOn(NO_FILTERS)}>
                 Turn the filters off
               </QuietButton>
             ) : (

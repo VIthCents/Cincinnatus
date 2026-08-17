@@ -14,6 +14,7 @@ import {
   median,
 } from "./score.ts";
 import { isExcluded } from "./queries.ts";
+import { proximityFactor, proximityOf } from "./proximity.ts";
 import { reachAdjustedSimilarity } from "./reach.ts";
 
 /**
@@ -193,12 +194,18 @@ export function rankJobs(input: RankInput): RankOutput {
     const effectiveFit = judged?.fit ?? fitScore;
     embedFitOf.set(job.id, fitScore);
 
+    // Proximity multiplies the blend rather than the fit, for the same reason
+    // freshness does: `fitScore` is what the badge, auto-prep and the widening
+    // test all read, and none of them should change their mind about a job
+    // because of where it is. Only the order changes.
+    const nearness = proximityFactor(proximityOf(job, profile));
+
     scored.push({
       job,
       fitScore: effectiveFit,
       ageDays: age,
       freshness,
-      finalScore: blend(effectiveFit, freshness),
+      finalScore: blend(effectiveFit, freshness) * nearness,
       withinReach: isWithinReach(job, profile),
       llmWhy: judged?.why ?? null,
     });

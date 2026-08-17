@@ -71,6 +71,8 @@ const SAVE_FAILED =
 const REMOVE_FAILED = "Cincinnatus could not remove the key. Try again in a moment.";
 const REMOVE_NUMBERS_FAILED =
   "Cincinnatus could not remove the numbers. Try again in a moment.";
+const LOCATION_SAVE_FAILED =
+  "Cincinnatus could not save where you are. Try again in a moment.";
 
 function Trouble({ text }: { text: string | null }) {
   if (text === null) return null;
@@ -154,6 +156,11 @@ export function SettingsTab() {
             dispatch({ type: "keys", keys: { ...state.keys, adzuna: connected } })
           }
         />
+      </section>
+
+      <section className="set">
+        <h3>Where you are</h3>
+        <LocationSection />
       </section>
 
       <section className="set">
@@ -268,6 +275,108 @@ export function SettingsTab() {
 }
 
 // -----------------------------------------------------------------------------
+
+/**
+ * The town this person is near.
+ *
+ * Until now the wizard asked once and nothing could ever change the answer —
+ * no screen in the app wrote `Profile` after first run. That was survivable
+ * while location only labelled a card, and is not now that it orders the list:
+ * somebody who skipped the question, mistyped it, or moved had no way back.
+ *
+ * Saving clears the stored profile embedding, exactly as the wizard's own save
+ * does; the next search recomputes it. Both boxes are needed, because a city
+ * with no state cannot be told from a city of the same name three states away.
+ */
+function LocationSection() {
+  const state = useAppState();
+  const dispatch = useAppDispatch();
+  const saved = state.profile?.location ?? null;
+
+  // Derived, not copied, for the same reason the wizard's boxes are: the
+  // profile can arrive after this panel is on screen, and `null` means "not
+  // typed yet" so a saved value shows without an effect writing state.
+  const [typedCity, setTypedCity] = useState<string | null>(null);
+  const [typedState, setTypedState] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [trouble, setTrouble] = useState<string | null>(null);
+
+  const profile = state.profile;
+  const city = typedCity ?? saved?.city ?? "";
+  const stateCode = typedState ?? saved?.state ?? "";
+  const ready = city.trim() !== "" && stateCode.trim().length === 2;
+  const changed =
+    city.trim() !== (saved?.city ?? "") || stateCode.trim() !== (saved?.state ?? "");
+
+  async function save() {
+    if (profile === null) return;
+    setSaving(true);
+    setMessage(null);
+    setTrouble(null);
+    const next = {
+      ...profile,
+      location: { city: city.trim(), state: stateCode.trim().toUpperCase() },
+    };
+    try {
+      await repo.saveProfile(db, next, tauriClock.now(), null, null);
+    } catch (err) {
+      console.error(err);
+      setSaving(false);
+      setTrouble(LOCATION_SAVE_FAILED);
+      return;
+    }
+    setSaving(false);
+    dispatch({ type: "profile", profile: next });
+    setMessage("✓ Saved. Your next search will put nearby jobs first.");
+  }
+
+  if (profile === null) {
+    return (
+      <p className="prose--muted">
+        Cincinnatus does not know what you are looking for yet. Finish setting up first.
+      </p>
+    );
+  }
+
+  return (
+    <div className="stack">
+      <p className="prose">
+        Jobs near this town come first in your list. Everything else still shows, a
+        little further down.
+      </p>
+      <div className="cn-pair">
+        <TextField
+          label="What city are you near?"
+          value={city}
+          onChange={(e) => setTypedCity(e.target.value)}
+          autoComplete="off"
+        />
+        <TextField
+          label="State"
+          hint="Two letters, like NC"
+          value={stateCode}
+          maxLength={2}
+          onChange={(e) => setTypedState(e.target.value)}
+          autoComplete="off"
+          className="cn-pair__narrow"
+        />
+      </div>
+      {message !== null && <Banner tone="success">{message}</Banner>}
+      <Trouble text={trouble} />
+      <div className="row">
+        <PrimaryButton
+          icon="location_on"
+          loading={saving}
+          disabled={!ready || !changed || saving}
+          onClick={() => void save()}
+        >
+          {saving ? "Saving" : "Save where I am"}
+        </PrimaryButton>
+      </div>
+    </div>
+  );
+}
 
 function AiKeySection({
   connected,

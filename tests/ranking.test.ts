@@ -7,6 +7,7 @@ import {
 } from "../src/core/pipeline/score.ts";
 import { assignCanonicals } from "../src/core/pipeline/dedupe.ts";
 import { isWithinReach, rankJobs } from "../src/core/pipeline/rank.ts";
+import { proximityFactor, proximityOf } from "../src/core/pipeline/proximity.ts";
 import {
   FRESHNESS_FLOOR,
   MAX_AGE_DAYS,
@@ -57,6 +58,109 @@ const profile: Profile = {
   salaryFloor: null,
   excludedKeywords: [],
 };
+
+describe("how near a job is", () => {
+  it("reads a remote job as near, because there is no commute", () => {
+    expect(proximityOf(job({ id: "a", remote: true, location: null }), profile)).toBe(
+      "remote",
+    );
+    expect(proximityFactor("remote")).toBe(1);
+  });
+
+  it("separates the person's own city from the rest of their state", () => {
+    expect(proximityOf(job({ id: "a", location: "Austin, TX" }), profile)).toBe(
+      "same_city",
+    );
+    expect(proximityOf(job({ id: "b", location: "Dallas, TX" }), profile)).toBe(
+      "same_state",
+    );
+    expect(proximityOf(job({ id: "c", location: "Boston, MA" }), profile)).toBe("far");
+  });
+
+  it("treats a missing location as unknown rather than distant", () => {
+    // Burying every board that omits a city would hide whole employers for a
+    // fact nobody ever stated.
+    expect(proximityOf(job({ id: "a", location: null }), profile)).toBe("unknown");
+    expect(proximityOf(job({ id: "b" }), { ...profile, location: null })).toBe(
+      "unknown",
+    );
+    expect(proximityFactor("unknown")).toBeGreaterThan(proximityFactor("far"));
+    expect(proximityFactor("unknown")).toBeLessThan(proximityFactor("same_state"));
+  });
+
+  it("orders the tiers, and never zeroes a distant job out", () => {
+    const ordered = [
+      proximityFactor("same_city"),
+      proximityFactor("same_state"),
+      proximityFactor("unknown"),
+      proximityFactor("far"),
+    ];
+    for (let i = 1; i < ordered.length; i++) {
+      expect(ordered[i]).toBeLessThan(ordered[i - 1] ?? Infinity);
+    }
+    expect(proximityFactor("far")).toBeGreaterThan(0);
+  });
+
+  it("puts the nearer of two equally good jobs first", () => {
+    const ranked = rankJobs({
+      jobs: [
+        job({ id: "far", location: "Seattle, WA" }),
+        job({ id: "near", location: "Austin, TX" }),
+      ],
+      vectors: new Map([
+        ["far", new Float32Array([1, 0])],
+        ["near", new Float32Array([1, 0])],
+      ]),
+      profileVector: new Float32Array([1, 0]),
+      profile,
+      now: NOW,
+    }).ranked;
+
+    expect(ranked.map((r) => r.job.id)).toEqual(["near", "far"]);
+  });
+
+  it("does not let distance overturn a real difference in fit", () => {
+    // A much better job three states away is still the better job. Proximity
+    // breaks ties; it does not decide the list.
+    const ranked = rankJobs({
+      jobs: [
+        job({ id: "far-strong", location: "Seattle, WA" }),
+        job({ id: "near-weak", location: "Austin, TX" }),
+      ],
+      vectors: new Map([
+        ["far-strong", new Float32Array([1, 0])],
+        ["near-weak", new Float32Array([0.6, 0.8])],
+      ]),
+      profileVector: new Float32Array([1, 0]),
+      profile,
+      now: NOW,
+    }).ranked;
+
+    expect(ranked[0]?.job.id).toBe("far-strong");
+  });
+
+  it("leaves the badge alone, so a job does not change match as it moves", () => {
+    // fitScore is what the badge, auto-prep and widening all read. Only the
+    // order may change with distance.
+    const near = rankJobs({
+      jobs: [job({ id: "a", location: "Austin, TX" })],
+      vectors: new Map([["a", new Float32Array([1, 0])]]),
+      profileVector: new Float32Array([1, 0]),
+      profile,
+      now: NOW,
+    }).ranked[0];
+    const far = rankJobs({
+      jobs: [job({ id: "a", location: "Boston, MA" })],
+      vectors: new Map([["a", new Float32Array([1, 0])]]),
+      profileVector: new Float32Array([1, 0]),
+      profile,
+      now: NOW,
+    }).ranked[0];
+
+    expect(near?.fitScore).toBe(far?.fitScore);
+    expect(far?.finalScore).toBeLessThan(near?.finalScore ?? Infinity);
+  });
+});
 
 describe("age and freshness", () => {
   it("clamps a future posting date to zero days rather than going negative", () => {

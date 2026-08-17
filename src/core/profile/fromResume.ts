@@ -1,5 +1,6 @@
 import type { Profile } from "../types.ts";
 import type { ResumeData } from "../documents/types.ts";
+import { normalizeUsLocation } from "../pipeline/states.ts";
 
 /**
  * ResumeData → the search Profile (SPEC §7 task 3, second half).
@@ -8,6 +9,41 @@ import type { ResumeData } from "../documents/types.ts";
  * that into search inputs is plain code. Defaults mirror parseProfile's:
  * 50-mile radius, any remote preference, no exclusions.
  */
+
+/**
+ * The address line off a resume, as a city and a state code.
+ *
+ * The old rule was `"City, ST"` and nothing else, which is not how people
+ * write their address: `"Fayetteville, NC 28303"`, `"Fayetteville, North
+ * Carolina"` and `"123 Main St, Fayetteville, NC"` all returned null, and a
+ * null location is what makes every job in the country count as nearby. The
+ * state table already used to read the boards' place names does this job, so
+ * this is one more caller rather than new parsing.
+ *
+ * Still refuses to guess: no recognisable state means null, because a city
+ * with the wrong state attached is worse than no location at all.
+ */
+export function locationFromResumeText(text: string | null): Profile["location"] {
+  if (text === null) return null;
+
+  // A trailing ZIP is not part of the state's name.
+  const withoutZip = text.trim().replace(/\s+\d{5}(-\d{4})?$/, "");
+  if (withoutZip === "") return null;
+
+  const normalized = normalizeUsLocation(withoutZip);
+  const match = /^(.*),\s*([A-Z]{2})$/.exec(normalized);
+  if (match === null || match[1] === undefined || match[2] === undefined) return null;
+
+  // "123 Main St, Fayetteville" — the town is the part nearest the state.
+  const city = match[1]
+    .split(",")
+    .map((p) => p.trim())
+    .filter((p) => p !== "")
+    .pop();
+  if (city === undefined) return null;
+
+  return { city, state: match[2] };
+}
 
 function yearOf(value: string | null): number | null {
   if (value === null) return null;
@@ -45,14 +81,7 @@ export function profileFromResume(resume: ResumeData, nowYear: number): Profile 
   const yearsExperience =
     earliest === null || latest === null ? null : Math.max(latest - earliest, 0);
 
-  // "City, ST" only — anything more exotic stays null rather than guessed.
-  let location: Profile["location"] = null;
-  if (resume.location !== null) {
-    const match = /^([^,]+),\s*([A-Za-z]{2})$/.exec(resume.location.trim());
-    if (match !== null && match[1] !== undefined && match[2] !== undefined) {
-      location = { city: match[1].trim(), state: match[2].toUpperCase() };
-    }
-  }
+  const location = locationFromResumeText(resume.location);
 
   return {
     titles,

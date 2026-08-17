@@ -115,6 +115,24 @@ export const MIN_RESULTS_BEFORE_WIDENING = 10;
  */
 export const MIN_FIT_FOR_WIDENING = GOOD_MATCH_FIT;
 
+/**
+ * What a job's distance is worth, as multipliers on the final score.
+ *
+ * The list is mostly nationwide in practice — a CDL driver in Fayetteville had
+ * 7,084 results and no reason for a Seattle posting to sit above a local one —
+ * so proximity has to reach the sort, not just the "Outside your area" label.
+ *
+ * These are shaped like FRESHNESS_FLOOR: a floor, not a cliff. The far tier
+ * keeps most of its score, so a genuinely stronger match three states away
+ * still outranks a weak one down the road; what it cannot do any more is
+ * outrank an equally good job the person could drive to. Unknown sits between
+ * the two on purpose — it is a missing fact, not a bad one, and burying every
+ * board that omits a city would quietly hide whole employers.
+ */
+export const PROXIMITY_SAME_STATE = 0.94;
+export const PROXIMITY_UNKNOWN = 0.9;
+export const PROXIMITY_FAR = 0.82;
+
 /** Default number of days of USAJobs postings to request. */
 export const USAJOBS_DEFAULT_WINDOW_DAYS = 7;
 

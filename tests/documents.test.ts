@@ -32,7 +32,10 @@ import {
   TAILOR_FEDERAL_ADDENDUM,
 } from "../src/core/documents/prompts/tailor.v1.ts";
 import { COVER_LETTER_SYSTEM } from "../src/core/documents/prompts/coverletter.v1.ts";
-import { profileFromResume } from "../src/core/profile/fromResume.ts";
+import {
+  locationFromResumeText,
+  profileFromResume,
+} from "../src/core/profile/fromResume.ts";
 import { createFakeLlm } from "./fakes/llm.ts";
 
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
@@ -705,5 +708,35 @@ describe("profileFromResume", () => {
     expect(profile.location).toBeNull();
     expect(profile.yearsExperience).toBeNull();
     expect(profile.titles).toEqual([]);
+  });
+
+  it("reads an address the way people actually write one", () => {
+    // The old rule was "City, ST" and nothing else, so all four of these
+    // returned null — and a null location makes every job in the country
+    // count as nearby, which is what put Seattle above a job down the road.
+    expect(locationFromResumeText("Fayetteville, NC")).toEqual({
+      city: "Fayetteville",
+      state: "NC",
+    });
+    expect(locationFromResumeText("Fayetteville, NC 28303")).toEqual({
+      city: "Fayetteville",
+      state: "NC",
+    });
+    expect(locationFromResumeText("Fayetteville, North Carolina")).toEqual({
+      city: "Fayetteville",
+      state: "NC",
+    });
+    expect(locationFromResumeText("123 Main St, Fayetteville, NC 28303-1234")).toEqual({
+      city: "Fayetteville",
+      state: "NC",
+    });
+  });
+
+  it("still refuses to invent a state", () => {
+    // A city with the wrong state attached is worse than no location at all.
+    expect(locationFromResumeText(null)).toBeNull();
+    expect(locationFromResumeText("Remote")).toBeNull();
+    expect(locationFromResumeText("somewhere in North Carolina")).toBeNull();
+    expect(locationFromResumeText("London, United Kingdom")).toBeNull();
   });
 });

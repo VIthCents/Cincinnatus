@@ -3,7 +3,10 @@ import type { Profile } from "../../core/types.ts";
 import type { ProgressEvent } from "../../core/ports.ts";
 import type { ResumeData } from "../../core/documents/types.ts";
 import { parseResume } from "../../core/documents/parseResume.ts";
-import { profileFromResume } from "../../core/profile/fromResume.ts";
+import {
+  locationFromResumeText,
+  profileFromResume,
+} from "../../core/profile/fromResume.ts";
 import * as repo from "../../core/db/repo.ts";
 
 import { extractResumeFile } from "../../tauri/extractText.ts";
@@ -519,9 +522,22 @@ function PreferencesStep({
   onDone: (profile: Profile) => void;
 }) {
   const [work, setWork] = useState("");
-  const [city, setCity] = useState("");
-  const [state, setState] = useState("");
+  const [typedCity, setTypedCity] = useState<string | null>(null);
+  const [typedState, setTypedState] = useState<string | null>(null);
   const [remoteOk, setRemoteOk] = useState(true);
+
+  // The address off the resume shows in the boxes, so the person confirms what
+  // was found instead of typing it again — and so a resume that states where
+  // they live is actually used, with the boxes as the correction.
+  //
+  // Derived rather than copied into state: the resume arrives while this step
+  // is already on screen, and writing it into state on arrival would either
+  // fight whatever they had begun typing or need an effect that reaches back
+  // and sets state. `null` means "not typed yet", which is what lets an empty
+  // box stay empty after they clear one.
+  const fromResume = locationFromResumeText(resume?.location ?? null);
+  const city = typedCity ?? fromResume?.city ?? "";
+  const state = typedState ?? fromResume?.state ?? "";
 
   const stillReading = parsing === "working" && resume === null;
   const needWorkWords = resume === null && !stillReading;
@@ -601,14 +617,14 @@ function PreferencesStep({
         <TextField
           label="What city are you near?"
           value={city}
-          onChange={(e) => setCity(e.target.value)}
+          onChange={(e) => setTypedCity(e.target.value)}
         />
         <TextField
           label="State"
           hint="Like NC"
           value={state}
           maxLength={2}
-          onChange={(e) => setState(e.target.value)}
+          onChange={(e) => setTypedState(e.target.value)}
           className="cn-pair__narrow"
         />
       </div>

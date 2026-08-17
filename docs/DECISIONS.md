@@ -1810,3 +1810,74 @@ would be a different mark again.
 **Consequence.** The two are compared side by side at 128px, 26px and 16px, in both themes. The PNG
 and ICO files are untouched — this change makes the app agree with the icon that already shipped,
 so the signed installer's identity is unchanged.
+
+---
+
+## 2026-08-17 — Proximity reaches the sort, and the 2026-08-14 radius ruling is amended
+
+**Context.** A CDL driver in Fayetteville, searching with 7,084 results in the list, saw Newport
+Beach, McLean, Seattle and Newark all badged "Good match" and ordered as if the distance between
+them meant nothing. It did mean nothing: `isWithinReach` was a boolean used for a filter, a card
+label and a count, and it never touched `finalScore`. The list is nationwide in practice — widening
+fires whenever fewer than ten worthwhile jobs are nearby — so "nearby" decided almost nothing about
+what a person actually read first.
+
+**This amends the ruling of 2026-08-14** ("Two collected profile fields start doing something; the
+third is ruled out"), which left `radiusMiles` deliberately unused and said real distance would need
+a geocoder. That ruling stands on its own terms and is not reversed: **there is still no geocoder,
+no new host on the allowlist, and nothing new leaves the machine.** What changed is the conclusion
+drawn from it. The old entry treated coarse location as not worth having; it is worth having, it was
+already computed, and it was being thrown away at the moment it could have been useful.
+
+Google Maps was considered and rejected on the owner's own terms — lightweight and simple. It needs
+a billable key, which would be a fourth key for a veteran to go and obtain against the promise that
+job search needs none; it would send someone's home town to a third party, which is a new paragraph
+in PRIVACY.md; and it would make ranking depend on the network, which today works offline.
+
+**Decision.** Three tiers, from the strings already in hand: `same_city`, `same_state`, `far`, plus
+`remote` (no commute at all, so it ranks with the home city) and `unknown`. Each is a multiplier on
+the final score — 1, 0.94, 0.82, and 0.9 for unknown.
+
+Shaped like `freshnessFactor`, and for the same reason: a floor, not a cliff. A genuinely stronger
+job three states away still outranks a weak one down the road, which the tests pin directly. What it
+can no longer do is outrank an equally good job the person could drive to.
+
+**It multiplies the blend, never the fit.** `fitScore` is what the badge, auto-prep and the widening
+test all read. Had proximity raised fit, nearby jobs would have cleared `MIN_FIT_FOR_WIDENING` more
+easily, widening would have stopped firing, and the nationwide list would have collapsed back to a
+local one — the exact failure already measured twice in this log (queries.ts, and the widening
+comment in rank.ts). Only the order changes.
+
+**Unknown sits between same-state and far, deliberately.** A missing city is a fact nobody stated,
+not a bad one. Burying it would quietly hide every employer whose board omits a location — and
+`isWithinReach` still reads a missing location as reachable, which is the older and more
+questionable default, left alone here because changing it is a filtering decision, not a sorting one.
+
+**Measured, per this log's habit.** NDCG@10 is unchanged to four decimals on both golden sets — CDL
+**0.5651**, infantry **0.7452** — and the last buried strong match moved *up* in both: rank 10 → 8
+for the CDL set, 18 → 17 for infantry. Proximity re-ordered comparable jobs without costing measured
+quality. Both golden profiles are in Fayetteville NC, so this is a real test of the change and not a
+vacuous one.
+
+**Consequence: two gaps had to be closed for any of this to reach a person.**
+
+`profileFromResume` accepted `"City, ST"` and nothing else, so `"Fayetteville, NC 28303"`,
+`"Fayetteville, North Carolina"` and `"123 Main St, Fayetteville, NC"` all produced `null` — and a
+null location makes *every job in the country* count as nearby. It now reuses the state table
+already written for the boards' place names. It still refuses to guess: no recognisable state means
+null, because a city with the wrong state attached is worse than no location at all.
+
+**Nothing in the app could set a location after the first run.** No screen wrote `Profile` at all —
+the wizard asked once and that was the only chance anyone ever got. Survivable while location only
+labelled a card; not survivable now that it orders the list. Settings gets a "Where you are" section,
+the first thing there that writes the profile.
+
+The wizard now shows the resume's own address in those boxes rather than asking for it again, which
+is the order the app promises: parse what the resume says, fall back to what we asked. Both the
+wizard and Settings derive the field values instead of copying them into state on arrival — the
+parse lands while the step is already on screen, and React 19's lint rule against setting state from
+an effect is right that the copy would be a race.
+
+"Near me only" joins the filter row, reusing `withinReach` rather than asking the question a third
+way, and is offered only when a location is known — a filter that visibly does nothing is the worst
+control to hand this audience.
