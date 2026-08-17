@@ -28,8 +28,10 @@ import {
 
 /**
  * The Opportunities tab (SPEC §8): one ranked list, one badge, one big button
- * per job. Filters are deliberately minimal: Work-from-home · Federal · Hide
- * fair matches.
+ * per job. Filters are deliberately minimal: Near me · Work-from-home ·
+ * Federal · Hide fair matches. "Near me" appears only once the app knows where
+ * the person is, because without a location every job counts as reachable and
+ * the button would do nothing visible.
  *
  * Built on the design system's opportunities components — JobList, JobCard,
  * MatchBadge, FilterRow — and its copy rulings: every fact is shown even when
