@@ -173,6 +173,24 @@ body,
   color: var(--text-muted);
 }
 
+/* A plain bulleted list in body copy. The reset strips markers and indent
+   from every ul, and the design system only puts them back inside printed
+   documents (.paper, .doc__body) — so a list in the interface itself would
+   otherwise run together as unmarked lines. */
+.prose-list {
+  margin: var(--space-3) 0 0;
+  padding-left: var(--space-6);
+  list-style: disc;
+  font-size: var(--body-lg-size);
+  line-height: var(--body-lg-line);
+  color: var(--text-body);
+  max-width: var(--measure);
+}
+
+.prose-list li + li {
+  margin-top: var(--space-2);
+}
+
 /* The wizard's resume drop target. wizard.css ships the paste box but not a
    file drop, and this one has to read as "put something here" from across a
    room. */

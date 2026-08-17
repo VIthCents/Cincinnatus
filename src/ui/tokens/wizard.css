@@ -105,11 +105,15 @@
   margin: var(--space-6) 0 0;
   padding: 0;
 }
+/* The step body is a block, not a grid column, and the number is taken out of
+   flow beside it. As a two-column grid, every inline element in a step — a
+   link, a <strong>, a <code> — became a grid item of its own and was placed
+   into the next free cell: links landed in the 40px number column and drew on
+   top of the words next to them. Steps name buttons and addresses constantly,
+   so the markup has to be free to hold inline elements. */
 .cn-guide li {
-  display: grid;
-  grid-template-columns: 40px 1fr;
-  gap: var(--space-4);
-  padding: var(--space-4) 0;
+  position: relative;
+  padding: var(--space-4) 0 var(--space-4) calc(40px + var(--space-4));
   border-bottom: var(--border-width) solid var(--border-hairline);
   font-size: var(--body-lg-size);
   line-height: 1.55;
@@ -121,6 +125,9 @@
 .cn-guide li::before {
   counter-increment: cn-step;
   content: counter(cn-step);
+  position: absolute;
+  left: 0;
+  top: var(--space-4);
   display: flex;
   align-items: center;
   justify-content: center;

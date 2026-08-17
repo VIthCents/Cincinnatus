@@ -154,7 +154,13 @@
   font-size: var(--body-size);
   color: var(--text-body);
 }
+/* Both of these are <span>s, so they need an explicit `display`. Height,
+   width and transform do nothing to a non-replaced inline box: without this
+   the track collapsed to its own border and the fill never showed, so a
+   search that was 70% read drew an empty bar. It also silently killed the
+   indeterminate animation, which slides the fill with a transform. */
 .cn-progress__track {
+  display: block;
   position: relative;
   height: 8px;
   border-radius: 2px;
@@ -163,6 +169,8 @@
   overflow: hidden;
 }
 .cn-progress__fill {
+  display: block;
+  width: 0;
   height: 100%;
   background: var(--primary);
   transition: width var(--duration-base) var(--ease-out);
