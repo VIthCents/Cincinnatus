@@ -1,10 +1,23 @@
 # Contributing
 
-Cincinnatus helps veterans find work. It is free, MIT-licensed, and runs entirely on the user's own
-machine. Thank you for helping.
+Cincinnatus helps veterans find work. It is free to use, MIT-licensed, and local-first: there is no
+server and no account, and the only calls that leave the machine are the ones
+[PRIVACY.md](./PRIVACY.md) lists. Thank you for helping.
 
-Please read [CLAUDE.md](./CLAUDE.md) and [docs/SPEC.md](./docs/SPEC.md) before non-trivial work. The
-seven constraints in CLAUDE.md override everything else, including this file.
+Read these before non-trivial work:
+
+- [CLAUDE.md](./CLAUDE.md) — seven constraints that override everything else, including this file.
+  They are short. Read them.
+- [docs/SPEC.md](./docs/SPEC.md) — what is being built, and why.
+- [docs/DECISIONS.md](./docs/DECISIONS.md) — every place reality disagreed with the plan, with the
+  measurement that settled it. If you are about to wonder "why on earth is it done this way", the
+  answer is probably in here.
+- [docs/RELEASING.md](./docs/RELEASING.md) — signing and distribution.
+
+Two habits this project runs on: **fixtures are truth** — record a real response once and test
+against it forever, never live network in a test — and **claims get measured**. Several confident,
+plausible ideas in `DECISIONS.md` turned out to be wrong when checked against real data, including a
+couple that would have made the app worse for exactly the people it is for.
 
 ## Never commit a real resume
 
@@ -28,6 +41,7 @@ You need Node 24+, pnpm 9+, and Rust (stable, MSVC toolchain on Windows).
 ```sh
 pnpm install
 pnpm test          # no network — runs against recorded fixtures
+pnpm typecheck
 pnpm tauri dev     # the app
 ```
 
@@ -39,6 +53,30 @@ Check your Rust toolchain is MSVC, not GNU:
 
 ```sh
 rustup show    # "Default host" should end in -pc-windows-msvc
+```
+
+## The harness
+
+The engine runs headless, which is how most of it gets exercised:
+
+```sh
+pnpm harness --profile fixtures/profile.sample.json      # a full job search
+pnpm harness analyze --resume fixtures/resumes/logistics.txt
+pnpm harness tailor  --resume <resume> --job-id <id from a search>
+```
+
+Copy `.env.example` to `.env` for the optional keys. Everything runs without them; the harness says
+which features are off and why.
+
+## The shape of it
+
+```
+src/core/    the whole engine — pure TypeScript, no Tauri and no DOM
+src/node/    adapters that let core run in the CLI harness
+src/tauri/   adapters that let core run in the app
+src/ui/      React, two tabs and a first-run wizard
+src-tauri/   the Rust shell: tray, notifications, OS keychain
+scripts/     harness.ts, and the build scripts for generated data
 ```
 
 ## Before you push

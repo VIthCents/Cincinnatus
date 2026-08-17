@@ -184,7 +184,7 @@ Already done for the current account. One step has a lead time measured in weeks
    or Enterprise Agreement** subscription. Free, trial and sponsored
    subscriptions are rejected.
 2. Assign yourself **Artifact Signing Identity Verifier** and run Organization
-   identity validation for Hawkseye Inc. **Budget 1–20 business days.** It
+   identity validation for Hawkseye Corp. **Budget 1–20 business days.** It
    cannot be expedited, and the confirmation email link expires after 7 days —
    miss it and validation starts over.
 3. Assign the CI service principal **Artifact Signing Certificate Profile
@@ -205,6 +205,6 @@ Already done for the current account. One step has a lead time measured in weeks
 
 A new certificate starts with no reputation. For the first weeks, some people
 downloading the installer will still see a SmartScreen prompt — quieter than the
-unsigned one, and it names Hawkseye Inc rather than "Unknown publisher", but it
+unsigned one, and it names Hawkseye Corp. rather than "Unknown publisher", but it
 is not silent immediately. Reputation accrues with downloads. Worth knowing
 before anyone concludes signing did not work.

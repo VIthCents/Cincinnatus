@@ -2,8 +2,12 @@
 
 Short version: **your resume stays on your computer.**
 
-Cincinnatus has no accounts. You never sign up. There is no company server that holds your
-information, because there is no server at all.
+Cincinnatus has no accounts. You never sign up to use this app. There is no company server
+that holds your information, because we have no server at all.
+
+Two of the extras — the AI helper and federal jobs — need their own sign-ups with the
+groups that run them. Those are listed below, in plain words. Those sign-ups are with
+them, never with us.
 
 ## What we never do
 
@@ -79,3 +83,6 @@ something leaves is listed above in plain words.
 ## Questions
 
 This app is free and open source. Anyone can read the code and check that this page is true.
+
+The one thing that ever costs money is the AI helper, and it is optional: you buy a small
+amount of credit from Anthropic and use only what you need. You never pay us.
