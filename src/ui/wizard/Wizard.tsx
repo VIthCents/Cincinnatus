@@ -6,7 +6,6 @@ import { parseResume } from "../../core/documents/parseResume.ts";
 import { profileFromResume } from "../../core/profile/fromResume.ts";
 import * as repo from "../../core/db/repo.ts";
 
-import { openUrl } from "@tauri-apps/plugin-opener";
 import { extractResumeFile } from "../../tauri/extractText.ts";
 import {
   setSecret,
@@ -30,6 +29,7 @@ import { sourceTroubleWords } from "../app/searchRunner.ts";
 import { adoptBaseResume } from "../documents/actions.ts";
 import { RunProgress } from "../components/RunProgress.tsx";
 import { Mark } from "../components/Mark.tsx";
+import { AnthropicKeyGuide, UsaJobsKeyGuide } from "../components/KeyGuides.tsx";
 import {
   Banner,
   Busy,
@@ -256,10 +256,12 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
   return (
     <>
       <h1 className="cn-wizard__title">Welcome. I'm Cincinnatus.</h1>
-      <p className="cn-wizard__lede">I help veterans find work. All of it free.</p>
       <p className="cn-wizard__lede">
-        Everything you tell me stays on this computer. No account. No sign-up. I only go
-        online to look for jobs.
+        I help veterans find work. Looking for jobs is free.
+      </p>
+      <p className="cn-wizard__lede">
+        Everything you tell me stays on this computer. There is no account for this app
+        and nothing to sign up for to use it. I only go online to look for jobs.
       </p>
       <PrimaryButton onClick={onNext} autoFocus>
         Let's get started
@@ -415,28 +417,7 @@ function AiKeyStep({
         for each job. It costs a little money — you pay Anthropic (the AI company)
         directly, only for what you use. About $5 lasts a long while.
       </p>
-      <Notice tone="warn">
-        You need a <strong>Claude Console</strong> account. That is Anthropic's
-        developer site — <strong>not</strong> the Claude chat app. A Claude Pro or Max
-        chat plan does <strong>not</strong> come with an access key, so please don't buy
-        one for this.
-      </Notice>
-      <ol className="cn-guide">
-        <li>
-          Go to{" "}
-          <button
-            type="button"
-            className="cn-jobcard__vialink"
-            onClick={() => void openUrl("https://console.anthropic.com/")}
-          >
-            console.anthropic.com
-          </button>{" "}
-          and make a free account.
-        </li>
-        <li>Add about $5 under Billing. You only pay for what you use.</li>
-        <li>Under "API keys", make a key and copy it.</li>
-        <li>Paste it below.</li>
-      </ol>
+      <AnthropicKeyGuide />
       <TextField
         label="Your AI access key"
         hint="It starts with sk-ant-"
@@ -498,20 +479,7 @@ function UsaJobsStep({ onDone }: { onDone: () => void }) {
         free key from USAJobs — the government's job site. It takes a few minutes and
         costs nothing.
       </p>
-      <ol className="cn-guide">
-        <li>
-          Go to{" "}
-          <button
-            type="button"
-            className="cn-jobcard__vialink"
-            onClick={() => void openUrl("https://developer.usajobs.gov/apirequest/")}
-          >
-            developer.usajobs.gov/apirequest
-          </button>
-        </li>
-        <li>Fill in your name and email. They email you a key.</li>
-        <li>Paste the key and that same email below.</li>
-      </ol>
+      <UsaJobsKeyGuide />
       <TextField
         label="Your USAJobs key"
         value={key}

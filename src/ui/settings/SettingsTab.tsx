@@ -1,4 +1,3 @@
-import { openUrl } from "@tauri-apps/plugin-opener";
 import { useEffect, useState } from "react";
 import { getMonthSpend, spendInWords } from "../../core/app/spend.ts";
 import { quotaStatus, quotaWords } from "../../core/app/quota.ts";
@@ -31,6 +30,12 @@ import { consumeSectionJump } from "../app/jump.ts";
 import { isThemePreference } from "../app/theme.ts";
 import { useAppDispatch, useAppState } from "../app/state.tsx";
 import { Icon } from "../components/Icon.tsx";
+import { LinkButton } from "../components/LinkButton.tsx";
+import {
+  AdzunaKeyGuide,
+  AnthropicKeyGuide,
+  UsaJobsKeyGuide,
+} from "../components/KeyGuides.tsx";
 import {
   Banner,
   Button,
@@ -121,8 +126,11 @@ export function SettingsTab() {
             <Icon name="payments" size={22} />
             <span>
               AI used this month: <b>{spend}</b>. This is a rough count kept on your
-              computer — the exact bill is in the account where you made your key, at
-              console.anthropic.com.
+              computer — the exact bill is in the account where you made your key, at{" "}
+              <LinkButton url="https://console.anthropic.com/">
+                console.anthropic.com
+              </LinkButton>
+              .
             </span>
           </p>
         )}
@@ -227,16 +235,32 @@ export function SettingsTab() {
       <section className="set">
         <h3>Your data</h3>
         <p className="prose">
-          Your resume, your chats, and every document live only on this computer.
-          Nothing is sent anywhere except: job searches go to the job sites, and — only
-          if you connected the AI helper — your resume and the one job you pick go to
-          Anthropic to write your documents.
+          Your resume, your chats, and every document live only on this computer. Four
+          things can leave, and nothing else:
         </p>
+        <ul className="prose-list">
+          <li>
+            The words you are searching for go to the job sites. That is the same thing
+            you would type into a search box.
+          </li>
+          <li>
+            Your resume and the one job you picked go to Anthropic — only if you
+            connected the AI helper, and only when you press the button.
+          </li>
+          <li>
+            The email you signed up to USAJobs with goes to USAJobs — only if federal
+            jobs are on. That is their rule, not ours.
+          </li>
+          <li>
+            Search words go to Adzuna — only if more job listings are on. Tapping Apply
+            on one of those jobs opens it on Adzuna first, and Adzuna counts that tap.
+            That is how they pay for letting us list their jobs.
+          </li>
+        </ul>
         <p className="prose">
-          Cincinnatus does not track you and never sends anyone your details. One thing
-          worth knowing: if you turned on more job listings, tapping Apply on one of
-          those opens it on Adzuna first, and Adzuna counts that tap. That is how they
-          pay for letting us list their jobs.
+          Cincinnatus does not track you and never sends anyone your details. There is
+          no account for this app. The sign-ups above are with those services, never
+          with us.
         </p>
       </section>
     </div>
@@ -287,18 +311,13 @@ function AiKeySection({
         </Banner>
       ) : (
         <p className="prose">
-          Not connected. The AI helper reads resumes and writes documents. Get a key at{" "}
-          <button
-            type="button"
-            className="cn-jobcard__vialink"
-            onClick={() => void openUrl("https://console.anthropic.com/")}
-          >
-            console.anthropic.com
-          </button>{" "}
-          — the developer site, not the Claude chat app. A Claude Pro or Max chat plan
-          does not include one.
+          Not connected. The AI helper reads your resume and writes documents. It is the
+          one part that costs money: you pay Anthropic directly, only for what you use.
         </p>
       )}
+      <Disclosure summary="How to get a key (about 5 minutes)" defaultOpen={!connected}>
+        <AnthropicKeyGuide />
+      </Disclosure>
       <TextField
         label="Paste your key"
         hint="It starts with sk-ant-"
@@ -391,17 +410,13 @@ function UsaJobsSection({
         </Banner>
       ) : (
         <p className="prose">
-          Free. Unlocks federal jobs, where veterans get hiring preference. Sign up at{" "}
-          <button
-            type="button"
-            className="cn-jobcard__vialink"
-            onClick={() => void openUrl("https://developer.usajobs.gov/apirequest/")}
-          >
-            developer.usajobs.gov/apirequest
-          </button>{" "}
-          — they email you a key.
+          Free. Unlocks federal jobs, where veterans get hiring preference. You sign up
+          with USAJobs and they email you a key.
         </p>
       )}
+      <Disclosure summary="How to get a key (about 5 minutes)" defaultOpen={!connected}>
+        <UsaJobsKeyGuide />
+      </Disclosure>
       <TextField
         label="USAJobs key"
         mono
@@ -560,34 +575,7 @@ function AdzunaSection({
         summary="How to get these numbers (about 5 minutes)"
         defaultOpen={!connected}
       >
-        <ol className="cn-guide">
-          <li>
-            Go to{" "}
-            <button
-              type="button"
-              className="cn-jobcard__vialink"
-              onClick={() => void openUrl("https://developer.adzuna.com/signup")}
-            >
-              developer.adzuna.com/signup
-            </button>{" "}
-            and fill in your name and email.
-          </li>
-          <li>
-            Where it asks what you are building, choose{" "}
-            <strong>Publishing Adzuna ad listings</strong>. This matters — the other
-            choices stop working after two weeks.
-          </li>
-          <li>
-            If it asks for a website and you do not have one, put{" "}
-            <strong>https://github.com/VIthCents/Cincinnatus</strong>.
-          </li>
-          <li>Check your email and click the link they send you.</li>
-          <li>
-            You land on a page called <strong>Dashboard</strong>. Copy the two things it
-            shows you into the boxes below. The Application ID is short. The Application
-            Key is long.
-          </li>
-        </ol>
+        <AdzunaKeyGuide />
       </Disclosure>
 
       <TextField
