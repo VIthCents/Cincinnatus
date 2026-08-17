@@ -20,9 +20,9 @@ one part that costs money, and you pay Anthropic for it, never us. The section
 
 ## Get it on your computer
 
-1. Click this link: **[Download Cincinnatus for Windows](https://github.com/VIthCents/Cincinnatus/releases/latest/download/Cincinnatus_0.1.0_x64-setup.exe)** (about 13 MB).
+1. Click this link: **[Download Cincinnatus for Windows](https://github.com/VIthCents/Cincinnatus/releases/latest/download/Cincinnatus_0.2.0_x64-setup.exe)** (about 13 MB).
 2. When it finishes, open your **Downloads** folder.
-3. Double-click the file named **Cincinnatus_0.1.0_x64-setup.exe**.
+3. Double-click the file named **Cincinnatus_0.2.0_x64-setup.exe**.
 4. Windows may show a blue box that says **"Windows protected your PC."** That is
    normal for a new app. Click **More info**.
 5. Check that the publisher line says **Hawkseye Corp.** That is us. (The dot at the
@@ -49,13 +49,13 @@ To check nothing changed on the way to you, open PowerShell in your Downloads
 folder and run:
 
 ```powershell
-Get-FileHash .\Cincinnatus_0.1.0_x64-setup.exe -Algorithm SHA256
+Get-FileHash .\Cincinnatus_0.2.0_x64-setup.exe -Algorithm SHA256
 ```
 
 It should print:
 
 ```
-39A9DBE897BE883216A463FB01DC9EF7ED9AD018C8550B7683B25627D688BC03
+8AC72C33985068B7267D790C62D67E05A56D0760E2D81390BB6FD05338A5C3CB
 ```
 
 </details>

@@ -3,7 +3,7 @@
   "description": "Free, local-first desktop app that helps veterans get hired.",
   "license": "MIT",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "dev": "node scripts/copy-wasm.ts && vite",
